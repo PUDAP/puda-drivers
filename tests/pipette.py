@@ -1,7 +1,7 @@
 import logging
 from puda_drivers.transfer.liquid.sartorius import SartoriusController
 
-# Optinal: finding ports
+# Optional: finding ports
 # import serial.tools.list_ports
 # for port, desc, hwid in serial.tools.list_ports.comports():
 #     print(f"{port}: {desc} [{hwid}]")
@@ -26,57 +26,56 @@ TIP_LENGTH = 70  # mm
 
 
 # --- TEST FUNCTION ---
-def test_sartorius_operations():
+def test_pipette_operations():
     """
     Tests the initialization and core liquid handling functions
-    of the SartoriusController mock class.
+    of the SartoriusController.
     """
-    print("--- 🔬 Starting Sartorius Controller Test ---")
-    sartorius = SartoriusController(port_name=SARTORIUS_PORT)
+    print("--- 🔬 Starting Pipette Controller Test ---")
+    pipette = SartoriusController(port_name=SARTORIUS_PORT)
 
     try:
         # 1. Initialize and Connect
         print("\n[STEP 1] Connecting to pipette...")
-        sartorius.connect()
+        # SartoriusController connects automatically in __init__, no need to call connect()
+        
+        # Always start with initializing
+        pipette.initialize()
 
-        # # 2. Attach Tip
-        # print("\n[STEP 2] Initialize...")
-        # sartorius.initialize()
-
-        sartorius.get_inward_speed()
+        # pipette.get_inward_speed()
         # print("\n set inward speed to 3")
-        # sartorius.set_inward_speed(3)
+        # pipette.set_inward_speed(3)
 
         # 3. Eject Tip (if any)
-        # print("\n[STEP 3] Ejecting Tip (if any)...")
-        # sartorius.eject_tip(return_position=30)
-        # print(f"\n[STEP 3] Aspirate {TRANSFER_VOLUME} uL...")
-        # sartorius.aspirate(amount=TRANSFER_VOLUME)
+        print("\n[STEP 3] Ejecting Tip (if any)...")
+        pipette.eject_tip(return_position=30)
+        print(f"\n[STEP 3] Aspirate {TRANSFER_VOLUME} uL...")
+        pipette.aspirate(amount=TRANSFER_VOLUME)
 
         # 4. Dispense
-        # print(f"\n[STEP 4] Dispensing {TRANSFER_VOLUME} uL...")
-        # sartorius.dispense(amount=TRANSFER_VOLUME)
+        print(f"\n[STEP 4] Dispensing {TRANSFER_VOLUME} uL...")
+        pipette.dispense(amount=TRANSFER_VOLUME)
 
         # # 5. Eject Tip
         # print("\n[STEP 5] Ejecting Tip...")
-        # sartorius.eject()
-        # if not sartorius.is_tip_on():
+        # pipette.eject()
+        # if not pipette.is_tip_on():
         #     print("✅ Tip check: Tip is ejected.")
         # else:
         #     raise Exception("Tip ejection failed.")
         #
-        # print("\n--- 🎉 All Sartorius operations passed! ---")
+        # print("\n--- 🎉 All Pipette operations passed! ---")
 
     except Exception as e:
         print(f"\n--- ❌ TEST FAILURE: {e} ---")
 
     finally:
         # 6. Disconnect
-        if sartorius and sartorius.is_connected:
+        if pipette and pipette.is_connected:
             print("\n[FINAL] Disconnecting...")
-            sartorius.disconnect()
-        print("--- 🧪 Sartorius Controller Test Complete ---")
+            pipette.disconnect()
+        print("--- 🧪 Pipette Controller Test Complete ---")
 
 
 if __name__ == "__main__":
-    test_sartorius_operations()
+    test_pipette_operations()

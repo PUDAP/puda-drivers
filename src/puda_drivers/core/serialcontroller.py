@@ -2,12 +2,12 @@
 Generic Serial Controller for communicating with devices over serial ports.
 """
 
-import serial
 import time
-import serial.tools.list_ports
 import logging
 from typing import Optional, List, Tuple
 from abc import ABC
+import serial
+import serial.tools.list_ports
 
 logger = logging.getLogger(__name__)
 
@@ -45,7 +45,7 @@ def list_serial_ports(filter_desc: Optional[str] = None) -> List[Tuple[str, str,
 
 class SerialController(ABC):
     DEFAULT_BAUDRATE = 9600
-    DEFAULT_TIMEOUT = 20  # seconds
+    DEFAULT_TIMEOUT = 30  # seconds
     POLL_INTERVAL = 0.1  # seconds
 
     def __init__(self, port_name, baudrate=DEFAULT_BAUDRATE, timeout=DEFAULT_TIMEOUT):
@@ -127,8 +127,8 @@ class SerialController(ABC):
         try:
             self._serial.reset_input_buffer()  # clear input buffer
             self._serial.reset_output_buffer()  # clear output buffer
-            self._serial.write(bytes(command, "utf-8"))
             self._serial.flush()
+            self._serial.write(bytes(command, "utf-8"))
 
         except serial.SerialTimeoutException as e:
             # Log the timeout error and return None as requested (no re-raise)
@@ -159,8 +159,12 @@ class SerialController(ABC):
                 # Read all available bytes
                 response += self._serial.read(self._serial.in_waiting)
 
-                # Check for expected response markers for early return
+                # Check for expected response markers for early return for qubot
                 if b"ok" in response or b"err" in response:
+                    break
+                
+                # Check for expected response markers for early return for sartorius
+                if b"\xba\r" in response:
                     break
             else:
                 time.sleep(0.1)
@@ -175,10 +179,12 @@ class SerialController(ABC):
         # Decode once and check the decoded string
         decoded_response = response.decode("utf-8", errors="ignore").strip()
         
-        if "ok" in decoded_response.lower():
+        if "ok" in decoded_response.lower(): # for qubot
             self._logger.debug("<- Received response: %r", decoded_response)
-        elif "err" in decoded_response.lower():
+        elif "err" in decoded_response.lower(): # for qubot
             self._logger.error("<- Received error: %r", decoded_response)
+        elif "º" in decoded_response: # for sartorius
+            self._logger.debug("<- Received response: %r", decoded_response)
         else:
             self._logger.warning(
                 "<- Received unexpected response (no 'ok' or 'err'): %r", decoded_response

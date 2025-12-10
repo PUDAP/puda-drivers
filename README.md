@@ -36,13 +36,19 @@ from puda_drivers.move import GCodeController
 gantry = GCodeController(port_name="/dev/ttyACM0", feed=3000)
 gantry.connect()
 
+# Configure axis limits for safety (recommended)
+gantry.set_axis_limits("X", 0, 200)
+gantry.set_axis_limits("Y", -200, 0)
+gantry.set_axis_limits("Z", -100, 0)
+gantry.set_axis_limits("A", -180, 180)
+
 # Home the gantry
 gantry.home()
 
-# Move to absolute position
+# Move to absolute position (validated against limits)
 gantry.move_absolute(x=50.0, y=-100.0, z=-10.0)
 
-# Move relative to current position
+# Move relative to current position (validated after conversion to absolute)
 gantry.move_relative(x=20.0, y=-10.0)
 
 # Query current position
@@ -52,6 +58,8 @@ print(f"Current position: {position}")
 # Disconnect when done
 gantry.disconnect()
 ```
+
+**Axis Limits and Validation**: The `move_absolute()` and `move_relative()` methods automatically validate that target positions are within configured axis limits. If a position is outside the limits, a `ValueError` is raised before any movement is executed. Use `set_axis_limits()` to configure limits for each axis.
 
 ### Liquid Handling (Sartorius)
 
@@ -114,6 +122,7 @@ pipette.disconnect()
   - Supports X, Y, Z, and A axes
   - Configurable feed rates
   - Position synchronization and homing
+  - Automatic axis limit validation for safe operation
 
 ### Liquid Handling
 
@@ -121,6 +130,38 @@ pipette.disconnect()
   - Aspirate and dispense operations
   - Tip attachment and ejection
   - Configurable speeds and volumes
+
+## Error Handling
+
+### Axis Limit Validation
+
+Both `move_absolute()` and `move_relative()` validate positions against configured axis limits before executing any movement. If a position is outside the limits, a `ValueError` is raised:
+
+```python
+from puda_drivers.move import GCodeController
+
+gantry = GCodeController(port_name="/dev/ttyACM0")
+gantry.connect()
+
+# Set axis limits
+gantry.set_axis_limits("X", 0, 200)
+gantry.set_axis_limits("Y", -200, 0)
+
+try:
+    # This will raise ValueError: Value 250 outside axis limits [0, 200]
+    gantry.move_absolute(x=250.0, y=-50.0)
+except ValueError as e:
+    print(f"Move rejected: {e}")
+
+# Relative moves are also validated after conversion to absolute positions
+try:
+    # If current X is 150, moving 100 more would exceed the limit
+    gantry.move_relative(x=100.0)
+except ValueError as e:
+    print(f"Move rejected: {e}")
+```
+
+Validation errors are automatically logged at the ERROR level before the exception is raised.
 
 ## Finding Serial Ports
 

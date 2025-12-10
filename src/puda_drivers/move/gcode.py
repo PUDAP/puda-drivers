@@ -55,7 +55,9 @@ class GCodeController(SerialController):
 
     DEFAULT_FEEDRATE = 3000  # mm/min
     MAX_FEEDRATE = 3000  # mm/min
+    MAX_Z_FEED_RATE = 1000 # mm/min
     TOLERANCE = 0.01  # tolerance for position sync in mm
+    SAFE_MOVE_HEIGHT = -5 # safe height for Z and A axes in mm
 
     PROTOCOL_TERMINATOR = "\r"
     VALID_AXES = "XYZA"
@@ -66,6 +68,7 @@ class GCodeController(SerialController):
         baudrate: int = SerialController.DEFAULT_BAUDRATE,
         timeout: int = SerialController.DEFAULT_TIMEOUT,
         feed: int = DEFAULT_FEEDRATE,
+        z_feed: int = MAX_Z_FEED_RATE,
     ):
         """
         Initialize the G-code controller.
@@ -87,13 +90,14 @@ class GCodeController(SerialController):
         )
 
         # Tracks internal position state
-        self.current_position: Dict[str, float] = {
+        self._current_position: Dict[str, float] = {
             "X": 0.0,
             "Y": 0.0,
             "Z": 0.0,
             "A": 0.0,
         }
         self._feed: int = feed
+        self._z_feed: int = z_feed
 
         # Initialize axis limits with default values
         self._axis_limits: Dict[str, AxisLimits] = {
@@ -150,6 +154,15 @@ class GCodeController(SerialController):
             Complete command string with terminator
         """
         return f"{command}{self.PROTOCOL_TERMINATOR}"
+
+    def wait_for_move(self) -> None:
+        """
+        Wait for the current move to complete (M400 command).
+        
+        This sends the M400 command which waits for all moves in the queue to complete
+        before continuing. This ensures that position updates are accurate.
+        """
+        self.execute(self._build_command("M400"))
 
     def _validate_axis(self, axis: str) -> str:
         """
@@ -292,19 +305,19 @@ class GCodeController(SerialController):
             home_target = "All"
 
         self._logger.info("[%s] homing axis/axes: %s **", cmd, home_target)
-        self._send_command(self._build_command(cmd))
+        self.execute(self._build_command(cmd))
         self._logger.info("Homing of %s completed.", home_target)
 
         # Update internal position (optimistic zeroing)
         if axis:
-            self.current_position[axis] = 0.0
+            self._current_position[axis] = 0.0
         else:
-            for key in self.current_position:
-                self.current_position[key] = 0.0
+            for key in self._current_position:
+                self._current_position[key] = 0.0
 
         self._logger.debug(
             "Internal position updated (optimistically zeroed) to %s",
-            self.current_position,
+            self._current_position,
         )
 
     def move_absolute(
@@ -314,7 +327,7 @@ class GCodeController(SerialController):
         z: Optional[float] = None,
         a: Optional[float] = None,
         feed: Optional[int] = None,
-    ) -> None:
+    ) -> Dict[str, float]:
         """
         Move to an absolute position (G90 + G1 command).
 
@@ -331,17 +344,26 @@ class GCodeController(SerialController):
         # Validate positions before executing move
         self._validate_move_positions(x=x, y=y, z=z, a=a)
 
+        # Fill in missing axes with current positions
+        target_x = x if x is not None else self._current_position["X"]
+        target_y = y if y is not None else self._current_position["Y"]
+        target_z = z if z is not None else self._current_position["Z"]
+        target_a = a if a is not None else self._current_position["A"]
+
         feed_rate = feed if feed is not None else self._feed
         self._logger.info(
             "Preparing absolute move to X:%s, Y:%s, Z:%s, A:%s at F:%s",
-            x,
-            y,
-            z,
-            a,
+            target_x,
+            target_y,
+            target_z,
+            target_a,
             feed_rate,
         )
 
-        self._execute_move(x=x, y=y, z=z, a=a, feed=feed)
+        return self._execute_move(
+            position={"X": target_x, "Y": target_y, "Z": target_z, "A": target_a},
+            feed=feed_rate
+        )
 
     def move_relative(
         self,
@@ -350,7 +372,7 @@ class GCodeController(SerialController):
         z: Optional[float] = None,
         a: Optional[float] = None,
         feed: Optional[int] = None,
-    ) -> None:
+    ) -> Dict[str, float]:
         """
         Move relative to the current position (converted to absolute move internally).
 
@@ -374,133 +396,111 @@ class GCodeController(SerialController):
             feed_rate,
         )
 
-        # Convert relative movements to absolute positions
-        abs_x = (self.current_position["X"] + x) if x is not None else None
-        abs_y = (self.current_position["Y"] + y) if y is not None else None
-        abs_z = (self.current_position["Z"] + z) if z is not None else None
-        abs_a = (self.current_position["A"] + a) if a is not None else None
+        # Convert relative movements to absolute positions, filling in missing axes with current position
+        abs_x = (self._current_position["X"] + x) if x is not None else self._current_position["X"]
+        abs_y = (self._current_position["Y"] + y) if y is not None else self._current_position["Y"]
+        abs_z = (self._current_position["Z"] + z) if z is not None else self._current_position["Z"]
+        abs_a = (self._current_position["A"] + a) if a is not None else self._current_position["A"]
 
         # Validate absolute positions before executing move
         self._validate_move_positions(x=abs_x, y=abs_y, z=abs_z, a=abs_a)
 
-        self._execute_move(x=abs_x, y=abs_y, z=abs_z, a=abs_a, feed=feed)
+        return self._execute_move(
+            position={"X": abs_x, "Y": abs_y, "Z": abs_z, "A": abs_a},
+            feed=feed_rate
+        )
 
     def _execute_move(
         self,
-        x: Optional[float] = None,
-        y: Optional[float] = None,
-        z: Optional[float] = None,
-        a: Optional[float] = None,
-        feed: Optional[int] = None,
-    ) -> None:
+        position: Dict[str, float],
+        feed: int,
+    ) -> Dict[str, float]:
         """
         Internal helper for executing G1 move commands with safe movement pattern.
         All coordinates are treated as absolute positions.
 
         Safe move pattern:
         1. If X or Y movement is needed, first move Z to 0 (safe height)
-        2. Then move X, Y (and optionally A) to target
-        3. Finally move Z to target position (if specified)
+        2. Then move X, Y to target
+        3. Finally move Z and A back to original position (or target if specified)
 
         Args:
-            x: Absolute X position (optional)
-            y: Absolute Y position (optional)
-            z: Absolute Z position (optional)
-            a: Absolute A position (optional)
-            feed: Feed rate (optional)
+            position: Dictionary with absolute positions for X, Y, Z, A axes
+            feed: Feed rate for the move
         """
-        # Calculate target positions (all absolute)
-        target_pos = self.current_position.copy()
-        has_x = x is not None
-        has_y = y is not None
-        has_z = z is not None
-        has_a = a is not None
+        # Check if any movement is needed
+        needs_x_move = abs(position["X"] - self._current_position["X"]) > self.TOLERANCE
+        needs_y_move = abs(position["Y"] - self._current_position["Y"]) > self.TOLERANCE
+        needs_z_move = abs(position["Z"] - self._current_position["Z"]) > self.TOLERANCE
+        needs_a_move = abs(position["A"] - self._current_position["A"]) > self.TOLERANCE
 
-        if not (has_x or has_y or has_z or has_a):
+        if not (needs_x_move or needs_y_move or needs_z_move or needs_a_move):
             self._logger.warning(
                 "Move command issued without any axis movement. Skipping transmission."
             )
             return
-
-        # Set target positions (all absolute)
-        if has_x:
-            target_pos["X"] = x
-        if has_y:
-            target_pos["Y"] = y
-        if has_z:
-            target_pos["Z"] = z
-        if has_a:
-            target_pos["A"] = a
-
-        feed_rate = feed if feed is not None else self._feed
-        if feed_rate > self.MAX_FEEDRATE:
-            feed_rate = self.MAX_FEEDRATE
-
-        # Ensure absolute mode is active
-        self._send_command(self._build_command("G90"))
-
-        # Safe move pattern: Z to 0, then XY, then Z to target
-        needs_xy_move = has_x or has_y
-        current_z = self.current_position["Z"]
-        target_z = target_pos["Z"] if has_z else current_z
-
-        # Step 1: Move Z to safe height (0) if XY movement is needed and Z is not already at 0
-        if needs_xy_move and abs(current_z) > 0.001:  # Small tolerance for floating point
-            # Validate safe height (Z=0) is within limits
-            self._validate_move_positions(z=0.0)
-            self._logger.info(
-                "Safe move: Raising Z to safe height (0) before XY movement"
+        
+        if needs_z_move and needs_a_move:
+            self._logger.warning(
+                "Move command issued with both Z and A movement. This is not supported. Skipping transmission."
             )
-            move_cmd = f"G1 Z0 F{feed_rate}"
-            self._send_command(self._build_command(move_cmd))
-            self.current_position["Z"] = 0.0
-            self._logger.debug("Z moved to safe height (0)")
+            raise ValueError("Move command issued with both Z and A movement. This is not supported.")
 
-        # Step 2: Move X, Y (and optionally A) to target
-        if needs_xy_move or has_a:
+        # Step 0: Ensure absolute mode is active
+        self.execute(self._build_command("G90"))
+        needs_xy_move = needs_x_move or needs_y_move
+
+        # Step 1: Move Z and A to SAFE_MOVE_HEIGHT if XY movement is needed
+        if needs_xy_move:
+            self._logger.info(
+                "Safe move: Raising Z and A to safe height (%s) before XY movement", self.SAFE_MOVE_HEIGHT
+            )
+            move_cmd = f"G1 Z-5 A-5 F{self._z_feed}"
+            self.execute(self._build_command(move_cmd))
+            self.wait_for_move()
+            self._current_position["Z"] = self.SAFE_MOVE_HEIGHT
+            self._current_position["A"] = self.SAFE_MOVE_HEIGHT
+            self._logger.debug("Z and A moved to safe height (%s)", self.SAFE_MOVE_HEIGHT)
+
+        # Step 2: Move X, Y to target
+        if needs_xy_move:
             move_cmd = "G1"
-            if has_x:
-                move_cmd += f" X{target_pos['X']}"
-            if has_y:
-                move_cmd += f" Y{target_pos['Y']}"
-            if has_a:
-                move_cmd += f" A{target_pos['A']}"
-            move_cmd += f" F{feed_rate}"
+            if needs_x_move:
+                move_cmd += f" X{position['X']}"
+            if needs_y_move:
+                move_cmd += f" Y{position['Y']}"
+            move_cmd += f" F{feed}"
 
             self._logger.info("Executing XY move command: %s", move_cmd)
-            self._send_command(self._build_command(move_cmd))
+            self.execute(self._build_command(move_cmd))
+            self.wait_for_move()
 
             # Update position for moved axes
-            if has_x:
-                self.current_position["X"] = target_pos["X"]
-            if has_y:
-                self.current_position["Y"] = target_pos["Y"]
-            if has_a:
-                self.current_position["A"] = target_pos["A"]
+            if needs_x_move:
+                self._current_position["X"] = position['X']
+            if needs_y_move:
+                self._current_position["Y"] = position['Y']
 
-        # Step 3: Move Z to target position (if Z movement was requested)
-        if has_z:
-            z_needs_move = abs(target_z - (0.0 if needs_xy_move else current_z)) > 0.001
-            if z_needs_move:
-                move_cmd = f"G1 Z{target_z} F{feed_rate}"
-                
-                if needs_xy_move:
-                    self._logger.info(
-                        "Safe move: Lowering Z to target position: %s", target_z
-                    )
-                else:
-                    self._logger.info("Executing Z move command: %s", move_cmd)
-                
-                self._send_command(self._build_command(move_cmd))
-                self.current_position["Z"] = target_z
+        # Step 3: Move Z and A back to original position (or target if specified)
+        if needs_z_move:
+            move_cmd = f"G1 Z{position['Z']} F{self._z_feed}"
+            self.execute(self._build_command(move_cmd))
+            self._current_position["Z"] = position['Z']
+        elif needs_a_move:
+            move_cmd = f"G1 A{position['A']} F{self._z_feed}"
+            self.execute(self._build_command(move_cmd))
+            self._current_position["A"] = position['A']
+        self.wait_for_move()
 
         self._logger.info(
-            "Move complete. Final position: %s", self.current_position
+            "Move complete. Final position: %s", self._current_position
         )
-        self._logger.debug("New internal position: %s", self.current_position)
+        self._logger.debug("New internal position: %s", self._current_position)
 
-        # Post-move position synchronization check
+        # Step 4: Post-move position synchronization check
         self.sync_position()
+        
+        return self._current_position
 
     def query_position(self) -> Dict[str, float]:
         """
@@ -555,8 +555,8 @@ class GCodeController(SerialController):
         queried_position = self.query_position()
 
         if not queried_position:
-            self._logger.warning("Query position failed. Cannot synchronize.")
-            return False, self.current_position
+            self._logger.error("Query position failed. Cannot synchronize.")
+            raise ValueError("Query position failed. Cannot synchronize.")
 
         # Compare internal vs. queried position
         axis_keys = ["X", "Y", "Z", "A"]
@@ -564,36 +564,31 @@ class GCodeController(SerialController):
 
         for axis in axis_keys:
             if (
-                axis in self.current_position
+                axis in self._current_position
                 and axis in queried_position
-                and abs(self.current_position[axis] - queried_position[axis])
+                and abs(self._current_position[axis] - queried_position[axis])
                 > self.TOLERANCE
             ):
                 self._logger.warning(
                     "Position mismatch found on %s axis: Internal=%.3f, Queried=%.3f",
                     axis,
-                    self.current_position[axis],
+                    self._current_position[axis],
                     queried_position[axis],
                 )
                 adjustment_needed = True
             elif axis in queried_position:
                 # Update internal position with queried position if it differs slightly
-                self.current_position[axis] = queried_position[axis]
+                self._current_position[axis] = queried_position[axis]
 
         # Perform re-synchronization move if needed
         if adjustment_needed:
             self._logger.info(
-                "** DISCREPANCY DETECTED. Moving robot back to internal position: %s **",
-                self.current_position,
+                "** DISCREPANCY DETECTED. Moving robot to internal position: %s **",
+                self._current_position,
             )
 
             try:
-                target_x = self.current_position.get("X")
-                target_y = self.current_position.get("Y")
-                target_z = self.current_position.get("Z")
-                target_a = self.current_position.get("A")
-
-                self.move_absolute(x=target_x, y=target_y, z=target_z, a=target_a)
+                self.move_absolute(x=self._current_position["X"], y=self._current_position["Y"], z=self._current_position["Z"], a=self._current_position["A"])
                 self._logger.info("Synchronization move successfully completed.")
 
                 # Recursive call to verify position after move
@@ -609,7 +604,7 @@ class GCodeController(SerialController):
         else:
             self._logger.info("No adjustment was made.")
 
-        return adjustment_needed, self.current_position.copy()
+        return adjustment_needed, self._current_position.copy()
 
     def get_info(self) -> str:
         """
@@ -628,5 +623,5 @@ class GCodeController(SerialController):
         Returns:
             Dictionary containing the current internal position for all axes
         """
-        self._logger.debug("Returning internal position: %s", self.current_position)
-        return self.current_position.copy()
+        self._logger.debug("Returning internal position: %s", self._current_position)
+        return self._current_position.copy()

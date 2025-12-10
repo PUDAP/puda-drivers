@@ -1,6 +1,13 @@
+import logging
 import serial
 from puda_drivers.move import GCodeController
 from puda_drivers.transfer.liquid.sartorius import SartoriusController
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,  # Use INFO level for cleaner output during automation
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+)
 
 # Qubot Configuration
 QUBOT_PORT = "/dev/ttyACM0"
@@ -14,12 +21,12 @@ TIP_LENGTH = 70  # mm
 
 # Define mock coordinates (assuming the Qubot operating space is in mm)
 # Note: These coordinates must be within the axis limits set below
-ASPIRATE_POS = {"X": 50.0, "Y": -50.0, "Z": -20.0, "A": -20.0}  # Source well location
+ASPIRATE_POS = {"X": 50.0, "Y": -50.0, "Z": -20.0, "A": 0.0}  # Source well location
 DISPENSE_POS = {
     "X": 80.0,
     "Y": -80.0,
     "Z": -20.0,
-    "A": -20.0,
+    "A": 0.0,
 }  # Destination well location
 SAFE_Z_POS = -10.0  # High Z position to prevent collisions (within Z limits)
 
@@ -29,10 +36,10 @@ pipette = None
 # 1. Initialize and Connect Qubot
 try:
     print("Connecting to qubot")
+    # GCodeController connects automatically in __init__, no need to call connect()
     qubot = GCodeController(
         port_name=QUBOT_PORT, baudrate=QUBOT_BAUDRATE, feed=QUBOT_FEEDRATE
     )
-    qubot.connect()
     
     # Set axis limits to accommodate the automation coordinates
     # Adjust these based on your actual hardware limits
@@ -46,6 +53,7 @@ try:
     for axis, limits in all_limits.items():
         print(f"  {axis}: [{limits.min}, {limits.max}]")
     
+    # Always start with homing
     qubot.home()
 except (IOError, ValueError, serial.SerialException) as e:
     print(f"FATAL ERROR: Could not connect to Qubot GCode Controller: \n{e}")
@@ -55,10 +63,9 @@ except Exception as e:
 # 2. Initialize and Connect the Liquid Handler (Sartorius)
 try:
     print("Connecting to pipette")
-    # The Sartorius class must be initialized with a port,
-    # so we'll simulate the connection for demonstration.
+    # SartoriusController connects automatically in __init__, no need to call connect()
     pipette = SartoriusController(port_name=SARTORIUS_PORT)
-    pipette.connect()
+    # always start with initializing
     pipette.initialize()
 except Exception as e:
     print(f"FATAL ERROR: Could not initialize/connect Sartorius: {e}")
@@ -78,21 +85,20 @@ def run_automation():
         print("Protocol Step 1: Attaching Tip")
         # Simulate moving to a tip rack position and attaching a tip
         print("Moving to Tip Rack and Attaching Tip...")
-        qubot.move_absolute(x=10.0, y=-10.0, z=-10.0, feed=3000)
+        pos = qubot.move_absolute(x=50.0, y=-50.0, z=-50.0, feed=3000)
+        print(f"  Position after move: {pos}")
 
         # 4. Protocol Step 2: Aspirate Liquid
         print(f"\nProtocol Step 2: Aspirating {TRANSFER_VOLUME} uL")
 
-        # Move to safe Z-height before moving across the deck
-        qubot.move_absolute(z=SAFE_Z_POS)
-
         # Move to the source well (ASPIRATE_POS)
-        qubot.move_absolute(
+        pos = qubot.move_absolute(
             x=ASPIRATE_POS["X"], y=ASPIRATE_POS["Y"], z=ASPIRATE_POS["Z"], feed=3000
         )
+        print(f"  Position at source well: {pos}")
 
         # Lower the tip to the aspiration depth using A axis for height
-        qubot.move_absolute(a=ASPIRATE_POS["A"])
+        print(f"  Position at aspiration depth: {pos}")
 
         # Perform aspiration
         pipette.aspirate(amount=TRANSFER_VOLUME)
@@ -101,27 +107,28 @@ def run_automation():
         print(f"\nProtocol Step 3: Dispensing {TRANSFER_VOLUME} uL")
 
         # Move to safe Z-height again
-        qubot.move_absolute(z=SAFE_Z_POS)
+        pos = qubot.move_absolute(z=SAFE_Z_POS)
+        print(f"  Position after safe Z move: {pos}")
 
         # Move to the destination well (DISPENSE_POS)
-        qubot.move_absolute(
+        pos = qubot.move_absolute(
             x=DISPENSE_POS["X"], y=DISPENSE_POS["Y"], z=DISPENSE_POS["Z"], feed=3000
         )
+        print(f"  Position at destination well: {pos}")
 
         # Lower the tip to the dispensing depth using A axis for height
-        qubot.move_absolute(a=DISPENSE_POS["A"])
+        pos = qubot.move_absolute(a=DISPENSE_POS["A"])
+        print(f"  Position at dispensing depth: {pos}")
 
         # Perform dispensing
-        pipette.dispense(amount=50)
+        pipette.dispense(amount=TRANSFER_VOLUME)
 
         # 6. Protocol Step 4: Finalization
         print("\nProtocol Step 4: Finalizing")
 
-        # Move back to safe Z-height
-        qubot.move_absolute(z=SAFE_Z_POS)
-
         # Simulate moving to a trash bin and ejecting the tip
-        qubot.move_absolute(x=10.0, y=-10.0)
+        pos = qubot.move_absolute(x=10.0, y=-10.0)
+        print(f"  Position at trash bin: {pos}")
         pipette.eject_tip()
 
     except Exception as e:
