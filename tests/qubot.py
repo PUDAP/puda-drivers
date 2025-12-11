@@ -1,21 +1,20 @@
 import logging
 from puda_drivers.move import GCodeController
+from puda_drivers.core.logging import setup_logging
 
 # Optinal: finding ports
 # import serial.tools.list_ports
 # for port, desc, hwid in serial.tools.list_ports.comports():
 #     print(f"{port}: {desc} [{hwid}]")
 
-# 1. Configure the root logger
+# --- LOGGING CONFIGURATION ---
 # All loggers in imported modules (SerialController, GCodeController) will inherit this setup.
-logging.basicConfig(
-    # Use logging.DEBUG to see all (DEBUG, INFO, WARNING, ERROR, CRITICAL) logs
-    level=logging.DEBUG,
-    # Recommended format: includes time, logger name, level, and message
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+setup_logging(
+    enable_file_logging=True,
+    log_level=logging.DEBUG,  # Use logging.DEBUG to see all (DEBUG, INFO, WARNING, ERROR, CRITICAL) logs
 )
 
-# 2. OPTIONAL: If you only want GCodeController's logs at specific level, you can specifically set it here
+# OPTIONAL: If you only want GCodeController's logs at specific level, you can specifically set it here
 # logging.getLogger('puda_drivers.gcodecontroller').setLevel(logging.INFO)
 
 PORT_NAME = "/dev/ttyACM0"

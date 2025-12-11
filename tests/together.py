@@ -2,11 +2,12 @@ import logging
 import serial
 from puda_drivers.move import GCodeController
 from puda_drivers.transfer.liquid.sartorius import SartoriusController
+from puda_drivers.core.logging import setup_logging
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,  # Use INFO level for cleaner output during automation
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+# --- LOGGING CONFIGURATION ---
+setup_logging(
+    enable_file_logging=False,
+    log_level=logging.INFO,  # Use INFO level for cleaner output during automation
 )
 
 # Qubot Configuration

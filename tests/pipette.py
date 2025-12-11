@@ -1,22 +1,25 @@
 import logging
 from puda_drivers.transfer.liquid.sartorius import SartoriusController
+from puda_drivers.core.logging import setup_logging
 
 # Optional: finding ports
 # import serial.tools.list_ports
 # for port, desc, hwid in serial.tools.list_ports.comports():
 #     print(f"{port}: {desc} [{hwid}]")
 
-# 1. Configure the root logger
-# All loggers in imported modules (SerialController, GCodeController) will inherit this setup.
-logging.basicConfig(
-    # Use logging.DEBUG to see all (DEBUG, INFO, WARNING, ERROR, CRITICAL) logs
-    level=logging.DEBUG,
-    # Recommended format: includes time, logger name, level, and message
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+# --- LOGGING CONFIGURATION ---
+# Set ENABLE_FILE_LOGGING to True to save logs to logs/ folder, False to only output to console
+ENABLE_FILE_LOGGING = True  # Change to False to disable file logging
+
+# Configure logging
+# All loggers in imported modules (SerialController, SartoriusController) will inherit this setup.
+setup_logging(
+    enable_file_logging=ENABLE_FILE_LOGGING,
+    log_level=logging.DEBUG,  # Use logging.DEBUG to see all (DEBUG, INFO, WARNING, ERROR, CRITICAL) logs
 )
 
-# 2. OPTIONAL: If you only want GCodeController's logs at specific level, you can specifically set it here
-# logging.getLogger('drivers.gcodecontroller').setLevel(logging.INFO)
+# OPTIONAL: If you only want specific loggers at specific level, you can specifically set it here
+# logging.getLogger('puda_drivers.transfer.liquid.sartorius').setLevel(logging.INFO)
 
 
 # --- CONFIGURATION ---

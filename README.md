@@ -7,6 +7,7 @@ Hardware drivers for the PUDA (Physical Unified Device Architecture) platform. T
 - **Gantry Control**: Control G-code compatible motion systems (e.g., QuBot)
 - **Liquid Handling**: Interface with Sartorius rLINE® pipettes and dispensers
 - **Serial Communication**: Robust serial port management with automatic reconnection
+- **Logging**: Configurable logging with optional file output to logs folder
 - **Cross-platform**: Works on Linux, macOS, and Windows
 
 ## Installation
@@ -26,6 +27,37 @@ pip install -e .
 ```
 
 ## Quick Start
+
+### Logging Configuration
+
+Configure logging for your application with optional file output:
+
+```python
+import logging
+from puda_drivers.core.logging import setup_logging
+
+# Configure logging with file output enabled
+setup_logging(
+    enable_file_logging=True,
+    log_level=logging.DEBUG,
+    logs_folder="logs", # Optional: default to logs
+    log_file_name="my_experiment"  # Optional: custom log file name
+)
+
+# Or disable file logging (console only)
+setup_logging(
+    enable_file_logging=False,
+    log_level=logging.INFO
+)
+```
+
+**Logging Options:**
+- `enable_file_logging`: If `True`, logs are written to files in the `logs/` folder. If `False`, logs only go to console (default: `False`)
+- `log_level`: Logging level constant (e.g., `logging.DEBUG`, `logging.INFO`, `logging.WARNING`, `logging.ERROR`, `logging.CRITICAL`) (default: `logging.DEBUG`)
+- `logs_folder`: Name of the folder to store log files (default: `"logs"`)
+- `log_file_name`: Custom name for the log file. If `None` or empty, uses timestamp-based name (e.g., `log_20250101_120000.log`). If provided without `.log` extension, it will be added automatically.
+
+When file logging is enabled, logs are saved to timestamped files (unless a custom name is provided) in the `logs/` folder. The logs folder is created automatically if it doesn't exist.
 
 ### Gantry Control (GCode)
 
@@ -162,6 +194,29 @@ except ValueError as e:
 ```
 
 Validation errors are automatically logged at the ERROR level before the exception is raised.
+
+### Logging Best Practices
+
+For production applications, configure logging at the start of your script:
+
+```python
+import logging
+from puda_drivers.core.logging import setup_logging
+from puda_drivers.move import GCodeController
+
+# Configure logging first, before initializing devices
+setup_logging(
+    enable_file_logging=True,
+    log_level=logging.INFO,
+    log_file_name="gantry_operation"
+)
+
+# Now all device operations will be logged
+gantry = GCodeController(port_name="/dev/ttyACM0")
+# ... rest of your code
+```
+
+This ensures all device communication, movements, and errors are captured in log files for debugging and audit purposes.
 
 ## Finding Serial Ports
 
