@@ -9,15 +9,13 @@ Reference: https://api.sartorius.com/document-hub/dam/download/34901/Sartorius-r
 
 import logging
 from typing import Optional
-
 from puda_drivers.core.serialcontroller import SerialController
-
 from .constants import STATUS_CODES
-
 
 class SartoriusDeviceError(Exception):
     """Custom exception raised when the Sartorius device reports an error."""
-
+    
+    pass
 
 class SartoriusController(SerialController):
     """
@@ -72,7 +70,7 @@ class SartoriusController(SerialController):
             timeout,
         )
 
-    def _build_command(self, command_code: str, value: str = "") -> str:
+    def _build_command(self, command: str, value: Optional[str] = None) -> str:
         """
         Build a command string according to the Sartorius protocol.
 
@@ -88,27 +86,10 @@ class SartoriusController(SerialController):
         return (
             self.PROTOCOL_SOH
             + self.SLAVE_ADDRESS
-            + "R"
-            + command_code
-            + value
+            + command
+            + (f"{value}" if value else "")
             + self.PROTOCOL_TERMINATOR
         )
-
-    def _check_response_error(self, response: str, operation: str) -> None:
-        """
-        Check if a response contains an error and raise an exception if so.
-
-        Args:
-            response: Response string from the device
-            operation: Description of the operation being performed (for error message)
-
-        Raises:
-            SartoriusDeviceError: If the response contains an error
-        """
-        if self.ERROR_RESPONSE in response.lower():
-            raise SartoriusDeviceError(
-                f"{operation} failed. Device returned error: {response}"
-            )
 
     def _validate_speed(self, speed: int, direction: str = "speed") -> None:
         """
@@ -149,29 +130,6 @@ class SartoriusController(SerialController):
             )
         return value_str
 
-    def _execute_command(
-        self, command_code: str, value: str = "", operation: str = ""
-    ) -> str:
-        """
-        Execute a command and return the response.
-
-        Args:
-            command_code: Command code to execute
-            value: Optional value for the command
-            operation: Description of the operation (for logging and error messages)
-
-        Returns:
-            Response string from the device
-
-        Raises:
-            SartoriusDeviceError: If the device returns an error
-        """
-        command = self._build_command(command_code, value)
-        self._send_command(command)
-        response = self._read_response()
-        self._check_response_error(response, operation or f"Command {command_code}")
-        return response
-
     def initialize(self) -> None:
         """
         Initialize the pipette unit (RZ command).
@@ -183,8 +141,8 @@ class SartoriusController(SerialController):
             SartoriusDeviceError: If initialization fails
         """
         self._logger.info("** Initializing Pipette Head (RZ) **")
-        self._execute_command("Z", operation="Pipette initialization")
-        self._logger.info("** Pipette Initialization Complete **")
+        self.execute(command="RZ")
+        self._logger.info("** Pipette Initialization Complete **\n")
 
     def get_inward_speed(self) -> int:
         """
@@ -197,7 +155,7 @@ class SartoriusController(SerialController):
             SartoriusDeviceError: If the query fails
         """
         self._logger.info("** Querying Inward Speed (DI) **")
-        response = self._execute_command("DI", operation="Inward speed query")
+        response = self.execute(command="DI")
 
         if len(response) < 2:
             raise SartoriusDeviceError(
@@ -205,7 +163,7 @@ class SartoriusController(SerialController):
             )
 
         speed = int(response[1])
-        self._logger.info("** Current Inward Speed: %s **", speed)
+        self._logger.info("** Current Inward Speed: %s **\n", speed)
         return speed
 
     def set_inward_speed(self, speed: int) -> None:
@@ -221,8 +179,8 @@ class SartoriusController(SerialController):
         """
         self._validate_speed(speed, "Inward")
         self._logger.info("** Setting Inward Speed (SI, Speed: %s) **", speed)
-        self._execute_command("I", value=str(speed), operation="Setting inward speed")
-        self._logger.info("** Inward Speed Set to %s Successfully **", speed)
+        self.execute(command="SI", value=str(speed))
+        self._logger.info("** Inward Speed Set to %s Successfully **\n", speed)
 
     def get_outward_speed(self) -> int:
         """
@@ -235,7 +193,7 @@ class SartoriusController(SerialController):
             SartoriusDeviceError: If the query fails
         """
         self._logger.info("** Querying Outward Speed (DO) **")
-        response = self._execute_command("DO", operation="Outward speed query")
+        response = self.execute(command="DO")
 
         if len(response) < 2:
             raise SartoriusDeviceError(
@@ -243,7 +201,7 @@ class SartoriusController(SerialController):
             )
 
         speed = int(response[1])
-        self._logger.info("** Current Outward Speed: %s **", speed)
+        self._logger.info("** Current Outward Speed: %s **\n", speed)
         return speed
 
     def set_outward_speed(self, speed: int) -> None:
@@ -259,8 +217,8 @@ class SartoriusController(SerialController):
         """
         self._validate_speed(speed, "Outward")
         self._logger.info("** Setting Outward Speed (SO, Speed: %s) **", speed)
-        self._execute_command("O", value=str(speed), operation="Setting outward speed")
-        self._logger.info("** Outward Speed Set to %s Successfully **", speed)
+        self.execute(command="SO", value=str(speed))
+        self._logger.info("** Outward Speed Set to %s Successfully **\n", speed)
 
     def run_to_position(self, position: int) -> None:
         """
@@ -275,9 +233,10 @@ class SartoriusController(SerialController):
         """
         position_str = self._validate_no_leading_zeros(position, "RP")
         self._logger.info("** Run to absolute Position (RP, Position: %s) **", position)
-        self._execute_command("P", value=position_str, operation="Run to position")
-        self._logger.info("** Reached Position %s Successfully **", position)
-
+        self.execute(command="RP", value=position_str)
+        self._logger.info("** Reached Position %s Successfully **\n", position)
+        
+    # instead of run_inward, use aspirate
     def aspirate(self, amount: float) -> None:
         """
         Aspirate fluid from the current location.
@@ -294,9 +253,10 @@ class SartoriusController(SerialController):
 
         steps = int(amount / self.MICROLITER_PER_STEP)
         self._logger.info("** Aspirating %s uL (RI%s steps) **", amount, steps)
-        self._execute_command("I", value=str(steps), operation="Aspirate")
-        self._logger.info("** Aspirated %s uL Successfully **", amount)
+        self.execute(command="RI", value=str(steps))
+        self._logger.info("** Aspirated %s uL Successfully **\n", amount)
 
+    # instead of run_outward, use dispense
     def dispense(self, amount: float) -> None:
         """
         Dispense fluid at the current location.
@@ -313,8 +273,8 @@ class SartoriusController(SerialController):
 
         steps = int(amount / self.MICROLITER_PER_STEP)
         self._logger.info("** Dispensing %s uL (RO%s steps) **", amount, steps)
-        self._execute_command("O", value=str(steps), operation="Dispense")
-        self._logger.info("** Dispensed %s uL Successfully **", amount)
+        self.execute(command="RO", value=str(steps))
+        self._logger.info("** Dispensed %s uL Successfully **\n", amount)
 
     def eject_tip(self, return_position: int = 30) -> None:
         """
@@ -333,10 +293,8 @@ class SartoriusController(SerialController):
             return_position,
             return_position,
         )
-        self._execute_command(
-            "E", value=position_str, operation="Eject tip with return position"
-        )
-        self._logger.info("** Tip Ejection Complete **")
+        self.execute(command="RE", value=position_str)
+        self._logger.info("** Tip Ejection Complete **\n")
 
     def run_blowout(self, return_position: Optional[int] = None) -> None:
         """
@@ -359,14 +317,12 @@ class SartoriusController(SerialController):
                 return_position,
                 return_position,
             )
-            self._execute_command(
-                "B", value=position_str, operation="Blowout with return position"
-            )
+            self.execute(command="RB", value=position_str)
         else:
             self._logger.info("** Running Blowout (RB) **")
-            self._execute_command("B", operation="Blowout")
+            self.execute(command="RB")
 
-        self._logger.info("** Blowout Complete **")
+        self._logger.info("** Blowout Complete **\n")
 
     def get_status(self) -> str:
         """
@@ -379,7 +335,7 @@ class SartoriusController(SerialController):
             SartoriusDeviceError: If the status query fails
         """
         self._logger.info("** Querying Pipette Status (DS) **")
-        response = self._execute_command("DS", operation="Status query")
+        response = self.execute(command="DS")
 
         if len(response) < 2:
             raise SartoriusDeviceError(
@@ -389,10 +345,37 @@ class SartoriusController(SerialController):
         status_code = response[1]
         if status_code in STATUS_CODES:
             status_message = STATUS_CODES[status_code]
-            self._logger.info("Pipette Status Code [%s]: %s", status_code, status_message)
+            self._logger.info("Pipette Status Code [%s]: %s\n", status_code, status_message)
         else:
             self._logger.warning(
-                "Pipette Status Code [%s]: Unknown Status Code", status_code
+                "Pipette Status Code [%s]: Unknown Status Code\n", status_code
             )
 
         return status_code
+    
+    def get_position(self) -> int:
+        """
+        Query the current position of the pipette (DP command).
+
+        Returns:
+            Current position in steps
+        """
+        self._logger.info("** Querying Position (DP) **")
+        response = self.execute(command="DP")
+        self._logger.info("** Position: %s steps **\n", response)
+        return response
+    
+    def get_liquid_level(self) -> int:
+        """
+        Query the current liquid level of the pipette (DN command).
+
+        Returns:
+            Current liquid level in microliters (µL)
+        """
+        # without tip 240 - 300
+        # incrase with tip attached and liquid
+        # 160 - 400
+        self._logger.info("** Querying Liquid Level (DN) **")
+        response = self.execute(command="DN")
+        self._logger.info("** Liquid Level: %s uL **\n", response)
+        return response

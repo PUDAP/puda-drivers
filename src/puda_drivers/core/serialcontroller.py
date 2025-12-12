@@ -5,7 +5,7 @@ Generic Serial Controller for communicating with devices over serial ports.
 import time
 import logging
 from typing import Optional, List, Tuple
-from abc import ABC
+from abc import ABC, abstractmethod
 import serial
 import serial.tools.list_ports
 
@@ -44,6 +44,9 @@ def list_serial_ports(filter_desc: Optional[str] = None) -> List[Tuple[str, str,
 
 
 class SerialController(ABC):
+    """
+    Abstract base class for serial controllers.
+    """
     DEFAULT_BAUDRATE = 9600
     DEFAULT_TIMEOUT = 30  # seconds
     POLL_INTERVAL = 0.1  # seconds
@@ -191,8 +194,15 @@ class SerialController(ABC):
             )
         
         return decoded_response
+    
+    @abstractmethod
+    def _build_command(self, command: str, value: Optional[str] = None) -> str:
+        """
+        Build a command string according to the device protocol.
+        """
+        pass
 
-    def execute(self, command: str) -> str:
+    def execute(self, command: str, value: Optional[str] = None) -> str:
         """
         Send a command and read the response atomically.
         
@@ -211,5 +221,5 @@ class SerialController(ABC):
             serial.SerialException: If device is not connected or communication fails
             serial.SerialTimeoutException: If no response is received within timeout
         """
-        self._send_command(command)
+        self._send_command(self._build_command(command, value))
         return self._read_response()

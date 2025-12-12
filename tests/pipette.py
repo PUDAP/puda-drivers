@@ -8,13 +8,9 @@ from puda_drivers.core.logging import setup_logging
 #     print(f"{port}: {desc} [{hwid}]")
 
 # --- LOGGING CONFIGURATION ---
-# Set ENABLE_FILE_LOGGING to True to save logs to logs/ folder, False to only output to console
-ENABLE_FILE_LOGGING = True  # Change to False to disable file logging
-
-# Configure logging
 # All loggers in imported modules (SerialController, SartoriusController) will inherit this setup.
 setup_logging(
-    enable_file_logging=ENABLE_FILE_LOGGING,
+    enable_file_logging=False,
     log_level=logging.DEBUG,  # Use logging.DEBUG to see all (DEBUG, INFO, WARNING, ERROR, CRITICAL) logs
 )
 
@@ -39,24 +35,33 @@ def test_pipette_operations():
 
     try:
         # 1. Initialize and Connect
-        print("\n[STEP 1] Connecting to pipette...")
+        print("[STEP 1] Connecting to pipette...")
         # SartoriusController connects automatically in __init__, no need to call connect()
-        
+
         # Always start with initializing
         pipette.initialize()
 
-        # pipette.get_inward_speed()
-        # print("\n set inward speed to 3")
-        # pipette.set_inward_speed(3)
+        pipette.get_status()
+        pipette.get_liquid_level()
+
+        # 2. Set and get inward and outward speeds
+        print("[STEP 2] Setting and getting inward and outward speeds...")
+        pipette.set_inward_speed(3)
+        pipette.get_inward_speed()
+
+        pipette.set_outward_speed(3)
+        pipette.get_outward_speed()
+        pipette.run_to_position(100)
+        pipette.get_position()
 
         # 3. Eject Tip (if any)
-        print("\n[STEP 3] Ejecting Tip (if any)...")
+        print("[STEP 3] Ejecting Tip (if any)...")
         pipette.eject_tip(return_position=30)
-        print(f"\n[STEP 3] Aspirate {TRANSFER_VOLUME} uL...")
+        print(f"[STEP 3] Aspirate {TRANSFER_VOLUME} uL...")
         pipette.aspirate(amount=TRANSFER_VOLUME)
 
         # 4. Dispense
-        print(f"\n[STEP 4] Dispensing {TRANSFER_VOLUME} uL...")
+        print(f"[STEP 4] Dispensing {TRANSFER_VOLUME} uL...")
         pipette.dispense(amount=TRANSFER_VOLUME)
 
         # # 5. Eject Tip

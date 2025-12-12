@@ -11,7 +11,7 @@ from puda_drivers.core.logging import setup_logging
 # All loggers in imported modules (SerialController, GCodeController) will inherit this setup.
 setup_logging(
     enable_file_logging=True,
-    log_level=logging.DEBUG,  # Use logging.DEBUG to see all (DEBUG, INFO, WARNING, ERROR, CRITICAL) logs
+    log_level=logging.INFO,  # Use logging.DEBUG to see all (DEBUG, INFO, WARNING, ERROR, CRITICAL) logs
 )
 
 # OPTIONAL: If you only want GCodeController's logs at specific level, you can specifically set it here
@@ -45,7 +45,6 @@ def main():
 
         # qubot.query_position()
         # Always start with homing
-        print("\n")
         qubot.home()
 
         # # Setting feed rate (aka move speed) 
@@ -54,25 +53,21 @@ def main():
 
         # Relative moves are converted to absolute internally, but works the same
         # for anything in the -axis, will have to be moved individually, else error will be raised
-        print("\n")
         qubot.move_absolute(x=00.0, y=-50.0, a=-100.0)
         
         # print("\n")
         # qubot.move_relative(x=10.0)
         
         # Example stepping code
-        # for _ in range(10):
-        #     pos = qubot.move_relative(x=10.0)
-        #     print(f"Position: {pos}")
+        for _ in range(10):
+            pos = qubot.move_relative(x=10.0)
+            print(f"Position: {pos}")
         
-        # sync position isalways called after move, but in case if needed you can call it manually
-        # qubot.sync_position()
+        # sync position is always called after move automatically (now private: _sync_position())
+        # Position synchronization happens automatically after each move
 
-        # print("\n")
         # qubot.move_absolute(x=330.0, y=-440.0, z=-175.0)
-
-        # print("\n")
-        # qubot.sync_position()
+        # Position synchronization happens automatically after each move
         # Example of an ERROR - invalid axis
         # try:
         #     qubot.home(axis="B")  # Generates ERROR
@@ -99,6 +94,9 @@ def main():
         #     qubot.move_absolute(z=-10.0, a=-20.0)  # Raises ValueError if both Z and A are moved
         # except ValueError as e:
         #     print(f"Z/A simultaneous movement error (expected): {e}")
+        
+        qubot.disconnect()
+        print("Disconnected from qubot")
 
     except Exception as e:
         logging.getLogger(__name__).error("An unrecoverable error occurred: %s", e)
