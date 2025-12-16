@@ -1,0 +1,42 @@
+{
+  "ordering": [
+    ["A1"]
+  ],
+  "brand": {
+    "brand": "custom"
+  },
+  "metadata": {
+    "displayName": "Rubbish"
+  },
+  "dimensions": {
+    "xDimension": 127.76,
+    "yDimension": 85.48,
+    "zDimension": 0.0
+  },
+  "wells": {
+    "A1": {
+      "depth": 0.0,
+      "shape": "rectangular",
+      "width": 10.0,
+      "height": 10.0,
+      "x": 0.0,
+      "y": 0.0,
+      "z": 0.0
+    }
+  },
+  "groups": [
+    {
+      "metadata": {},
+      "wells": [
+        "A1"
+      ]
+    }
+  ],
+  "version": 1,
+  "schemaVersion": 2,
+  "cornerOffsetFromSlot": {
+    "x": 0,
+    "y": 0,
+    "z": 0
+  }
+}

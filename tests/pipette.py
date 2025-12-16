@@ -3,9 +3,8 @@ from puda_drivers.transfer.liquid.sartorius import SartoriusController
 from puda_drivers.core.logging import setup_logging
 
 # Optional: finding ports
-# import serial.tools.list_ports
-# for port, desc, hwid in serial.tools.list_ports.comports():
-#     print(f"{port}: {desc} [{hwid}]")
+from puda_drivers.core.serialcontroller import list_serial_ports
+print(list_serial_ports())
 
 # --- LOGGING CONFIGURATION ---
 # All loggers in imported modules (SerialController, SartoriusController) will inherit this setup.
@@ -20,11 +19,12 @@ setup_logging(
 
 # --- CONFIGURATION ---
 SARTORIUS_PORT = "/dev/ttyUSB0"
+
 TRANSFER_VOLUME = 20  # uL
 TIP_LENGTH = 70  # mm
 
 
-# --- TEST FUNCTION ---
+# if there are 2 consecutive pipette commands, have to manually call time.sleep(5) if not the second will not run
 def test_pipette_operations():
     """
     Tests the initialization and core liquid handling functions

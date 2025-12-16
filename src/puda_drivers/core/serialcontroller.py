@@ -25,14 +25,6 @@ def list_serial_ports(filter_desc: Optional[str] = None) -> List[Tuple[str, str,
 
     Returns:
         List of tuples, where each tuple contains (port_name, description, hwid).
-
-    Example:
-        >>> from puda_drivers.core import list_serial_ports
-        >>> ports = list_serial_ports()
-        >>> for port, desc, hwid in ports:
-        ...     print(f"{port}: {desc}")
-        >>> # Filter for specific devices
-        >>> sartorius_ports = list_serial_ports(filter_desc="Sartorius")
     """
     all_ports = serial.tools.list_ports.comports()
     filtered_ports = []
@@ -166,7 +158,7 @@ class SerialController(ABC):
                 if b"ok" in response or b"err" in response:
                     break
                 
-                # Check for expected response markers for early return for sartorius
+                # for sartorius since res not returning ok or err
                 if b"\xba\r" in response:
                     break
             else:
@@ -182,11 +174,11 @@ class SerialController(ABC):
         # Decode once and check the decoded string
         decoded_response = response.decode("utf-8", errors="ignore").strip()
         
-        if "ok" in decoded_response.lower(): # for qubot
+        if "ok" in decoded_response.lower():
             self._logger.debug("<- Received response: %r", decoded_response)
-        elif "err" in decoded_response.lower(): # for qubot
+        elif "err" in decoded_response.lower():
             self._logger.error("<- Received error: %r", decoded_response)
-        elif "º" in decoded_response: # for sartorius
+        elif "º" in decoded_response: # for sartorius (since res not returning ok or err)
             self._logger.debug("<- Received response: %r", decoded_response)
         else:
             self._logger.warning(

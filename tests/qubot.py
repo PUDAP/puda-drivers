@@ -53,15 +53,15 @@ def main():
 
         # Relative moves are converted to absolute internally, but works the same
         # for anything in the -axis, will have to be moved individually, else error will be raised
-        qubot.move_absolute(x=00.0, y=-50.0, a=-100.0)
+        qubot.move_absolute(x=0.0, y=-50.0, a=-100.0)
         
         # print("\n")
         # qubot.move_relative(x=10.0)
         
         # Example stepping code
-        for _ in range(10):
-            pos = qubot.move_relative(x=10.0)
-            print(f"Position: {pos}")
+        # for _ in range(10):
+        #     pos = qubot.move_relative(x=10.0)
+        #     print(f"Position: {pos}")
         
         # sync position is always called after move automatically (now private: _sync_position())
         # Position synchronization happens automatically after each move
