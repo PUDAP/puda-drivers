@@ -9,6 +9,7 @@ This class demonstrates the integration of:
 
 from typing import Optional, Dict, Tuple
 from puda_drivers.move import GCodeController, Deck
+from puda_drivers.core import Position
 from puda_drivers.transfer.liquid.sartorius import SartoriusController
 
 
@@ -42,22 +43,22 @@ class First:
     
     # Slot origins
     SLOT_ORIGINS = {
-        "A1": (0, 0),
-        "A2": (0, 100),
-        "A3": (0, 200),
-        "A4": (0, 300),
-        "B1": (100, 0),
-        "B2": (100, 100),
-        "B3": (100, 200),
-        "B4": (100, 300),
-        "C1": (200, 0),
-        "C2": (200, 100),
-        "C3": (200, 200),
-        "C4": (200, 300),
-        "D1": (300, 0),
-        "D2": (300, 100),
-        "D3": (300, 200),
-        "D4": (300, 300),
+        "A1": Position(x=0, y=0),
+        "A2": Position(x=0, y=100),
+        "A3": Position(x=0, y=200),
+        "A4": Position(x=0, y=300),
+        "B1": Position(x=100, y=0),
+        "B2": Position(x=100, y=100),
+        "B3": Position(x=100, y=200),
+        "B4": Position(x=100, y=300),
+        "C1": Position(x=200, y=0),
+        "C2": Position(x=200, y=100),
+        "C3": Position(x=200, y=200),
+        "C4": Position(x=200, y=300),
+        "D1": Position(x=300, y=0),
+        "D2": Position(x=300, y=100),
+        "D3": Position(x=300, y=200),
+        "D4": Position(x=300, y=300),
     }
     
     def __init__(
@@ -95,7 +96,7 @@ class First:
         for axis, (min_val, max_val) in limits.items():
             self.qubot.set_axis_limits(axis, min_val, max_val)
         
-    def get_slot_origin(self, slot: str) -> Tuple[float, float, float]:
+    def get_slot_origin(self, slot: str) -> Position:
         """
         Get the origin coordinates of a slot.
         
@@ -103,7 +104,7 @@ class First:
             slot: Slot name (e.g., 'A1', 'B2')
             
         Returns:
-            Tuple of (x, y, z) coordinates for the slot origin
+            Position for the slot origin
             
         Raises:
             KeyError: If slot name is invalid
@@ -113,7 +114,7 @@ class First:
             raise KeyError(f"Invalid slot name: {slot}. Must be one of {list(self.SLOT_ORIGINS.keys())}")
         return self.SLOT_ORIGINS[slot]
     
-    def calculate_absolute_position(self, slot: str, well: Optional[str] = None) -> Tuple[float, float, float]:
+    def calculate_absolute_position(self, slot: str, well: Optional[str] = None) -> Position:
         """
         Calculate absolute position for a slot (and optionally a well within that slot).
         
@@ -122,7 +123,7 @@ class First:
             well: Optional well name within the slot (e.g., 'A1' for a well in a tiprack)
             
         Returns:
-            Tuple of (x, y, z) absolute coordinates
+            Position with absolute coordinates
             
         Note:
             This is a placeholder - actual implementation needed.
@@ -135,7 +136,7 @@ class First:
             # TODO: Implement well position calculation
             # labware = self.deck[slot]
             # well_pos = labware.get_well_position(well)
-            # return (slot_origin[0] + well_pos[0], slot_origin[1] + well_pos[1], slot_origin[2] + well_pos[2])
+            # return slot_origin + well_pos
             pass
         
         return slot_origin

@@ -3,6 +3,7 @@ Rubbish Labware
 """
 
 from puda_drivers.labware import StandardLabware
+from puda_drivers.core import Position
 
 class Rubbish(StandardLabware):
     """
@@ -16,12 +17,12 @@ class Rubbish(StandardLabware):
             cols=1
         )
 
-    def get_well_position(self, well_id: str):
+    def get_well_position(self, well_id: str) -> Position:
         """
         Get the position of a well from the definition.json file
         """
-        return {
-            "x": .0,
-            "y": 0.0,
-            "z": 10.0,
-        }
+        return Position(
+            x=0.0,
+            y=0.0,
+            z=10.0,
+        )

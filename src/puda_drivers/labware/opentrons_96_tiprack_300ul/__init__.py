@@ -1,6 +1,7 @@
 # src/puda_drivers/labware/opentrons_96_tiprack_300ul/__init__.py
 
 from puda_drivers.labware import StandardLabware
+from puda_drivers.core import Position
 
 
 class Opentrons96TipRack300(StandardLabware):
@@ -28,7 +29,7 @@ class Opentrons96TipRack300(StandardLabware):
         # Store well data from JSON for attach_tip logic
         self._well_data = self._definition.get("wells", {})
 
-    def get_well_position(self, well_id: str):
+    def get_well_position(self, well_id: str) -> Position:
         """
         Get the top center position of a well from definition.json.
         
@@ -36,7 +37,7 @@ class Opentrons96TipRack300(StandardLabware):
             well_id: Well identifier (e.g., "A1", "H12")
             
         Returns:
-            Dictionary with x, y, z coordinates
+            Position with x, y, z coordinates
             
         Raises:
             KeyError: If well_id doesn't exist in the tip rack
@@ -50,8 +51,8 @@ class Opentrons96TipRack300(StandardLabware):
         well_data = self._definition.get("wells", {}).get(well_id_upper, {})
         
         # Return position of the well (x, y are already center coordinates)
-        return {
-            "x": well_data.get("x", 0.0),
-            "y": well_data.get("y", 0.0),
-            "z": well_data.get("z", 0.0), 
-        }
+        return Position(
+            x=well_data.get("x", 0.0),
+            y=well_data.get("y", 0.0),
+            z=well_data.get("z", 0.0), 
+        )

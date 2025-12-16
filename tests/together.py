@@ -1,6 +1,7 @@
 import logging
 import serial
 from puda_drivers.move import GCodeController
+from puda_drivers.core import Position
 from puda_drivers.transfer.liquid.sartorius import SartoriusController
 from puda_drivers.core.logging import setup_logging
 
@@ -22,13 +23,13 @@ TIP_LENGTH = 70  # mm
 
 # Define mock coordinates (assuming the Qubot operating space is in mm)
 # Note: These coordinates must be within the axis limits set below
-ASPIRATE_POS = {"X": 50.0, "Y": -50.0, "Z": -20.0, "A": 0.0}  # Source well location
-DISPENSE_POS = {
-    "X": 80.0,
-    "Y": -80.0,
-    "Z": -20.0,
-    "A": 0.0,
-}  # Destination well location
+ASPIRATE_POS = Position(x=50.0, y=-50.0, z=-20.0, a=0.0)  # Source well location
+DISPENSE_POS = Position(
+    x=80.0,
+    y=-80.0,
+    z=-20.0,
+    a=0.0,
+)  # Destination well location
 SAFE_Z_POS = -10.0  # High Z position to prevent collisions (within Z limits)
 
 qubot = None
@@ -86,16 +87,14 @@ def run_automation():
         print("Protocol Step 1: Attaching Tip")
         # Simulate moving to a tip rack position and attaching a tip
         print("Moving to Tip Rack and Attaching Tip...")
-        pos = qubot.move_absolute(x=50.0, y=-50.0, z=-50.0, feed=3000)
+        pos = qubot.move_absolute(position=Position(x=50.0, y=-50.0, z=-50.0), feed=3000)
         print(f"  Position after move: {pos}")
 
         # 4. Protocol Step 2: Aspirate Liquid
         print(f"\nProtocol Step 2: Aspirating {TRANSFER_VOLUME} uL")
 
-        # Move to the source well (ASPIRATE_POS)
-        pos = qubot.move_absolute(
-            x=ASPIRATE_POS["X"], y=ASPIRATE_POS["Y"], z=ASPIRATE_POS["Z"], feed=3000
-        )
+        # Move to the source well (ASPIRATE_POS) - using Position object
+        pos = qubot.move_absolute(position=ASPIRATE_POS, feed=3000)
         print(f"  Position at source well: {pos}")
 
         # Lower the tip to the aspiration depth using A axis for height
@@ -108,17 +107,15 @@ def run_automation():
         print(f"\nProtocol Step 3: Dispensing {TRANSFER_VOLUME} uL")
 
         # Move to safe Z-height again
-        pos = qubot.move_absolute(z=SAFE_Z_POS)
+        pos = qubot.move_absolute(position=Position(z=SAFE_Z_POS))
         print(f"  Position after safe Z move: {pos}")
 
-        # Move to the destination well (DISPENSE_POS)
-        pos = qubot.move_absolute(
-            x=DISPENSE_POS["X"], y=DISPENSE_POS["Y"], z=DISPENSE_POS["Z"], feed=3000
-        )
+        # Move to the destination well (DISPENSE_POS) - using Position object
+        pos = qubot.move_absolute(position=DISPENSE_POS, feed=3000)
         print(f"  Position at destination well: {pos}")
 
         # Lower the tip to the dispensing depth using A axis for height
-        pos = qubot.move_absolute(a=DISPENSE_POS["A"])
+        pos = qubot.move_absolute(position=Position(a=DISPENSE_POS.a))
         print(f"  Position at dispensing depth: {pos}")
 
         # Perform dispensing
@@ -128,7 +125,7 @@ def run_automation():
         print("\nProtocol Step 4: Finalizing")
 
         # Simulate moving to a trash bin and ejecting the tip
-        pos = qubot.move_absolute(x=10.0, y=-10.0)
+        pos = qubot.move_absolute(position=Position(x=10.0, y=-10.0))
         print(f"  Position at trash bin: {pos}")
         pipette.eject_tip()
 

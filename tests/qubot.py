@@ -1,5 +1,6 @@
 import logging
 from puda_drivers.move import GCodeController
+from puda_drivers.core import Position
 from puda_drivers.core.logging import setup_logging
 
 # Optinal: finding ports
@@ -53,7 +54,7 @@ def main():
 
         # Relative moves are converted to absolute internally, but works the same
         # for anything in the -axis, will have to be moved individually, else error will be raised
-        qubot.move_absolute(x=0.0, y=-50.0, a=-100.0)
+        qubot.move_absolute(position=Position(x=0.0, y=-50.0, a=-100.0))
         
         # print("\n")
         # qubot.move_relative(x=10.0)
