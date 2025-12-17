@@ -50,8 +50,6 @@ class SerialController(ABC):
         self.timeout = timeout
         self._logger = logger
 
-        self.connect()
-
     def connect(self) -> None:
         """
         Establishes the serial connection to the port.

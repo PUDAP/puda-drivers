@@ -2,7 +2,8 @@
 
 # Import from the sub-packages (folders)
 from .labware import StandardLabware
-from .opentrons_96_tiprack_300ul import Opentrons96TipRack300
-from .rubbish import Rubbish
 
-__all__ = ["Opentrons96TipRack300", "Rubbish", "StandardLabware"]
+# Export get_available_labware as a standalone function
+get_available_labware = StandardLabware.get_available_labware
+
+__all__ = ["StandardLabware", "get_available_labware"]
