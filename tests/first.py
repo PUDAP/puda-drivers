@@ -29,7 +29,6 @@ if __name__ == "__main__":
         }
     )
 
-    # print(get_available_labware())
     print(machine.deck)
     print(machine.deck["C2"])
 
@@ -37,12 +36,10 @@ if __name__ == "__main__":
     machine.qubot.home()
     machine.pipette.initialize()
     
-    machine.attach_tip("A3", "G8")
-    machine.aspirate_from("C2", "A1", 100)
-    # machine.dispense_to("C2", "B4", 100)
-    # machine.drop_tip("C1", "A1")
-    # machine.attach_tip("A1", "D4")
-    # machine.drop_tip("C1", "A1")
+    machine.attach_tip(slot="A3", well="G8")
+    machine.aspirate_from(slot="C2", well="A1", amount=100)
+    machine.dispense_to(slot="C2", well="B4", amount=100)
+    machine.drop_tip(slot="C1", well="A1")
     
     # tiprack_wells = machine.deck["A3"].wells
     # # get pick up pipette one by one and drop it in the trash bin
@@ -58,4 +55,5 @@ if __name__ == "__main__":
     #     machine.drop_tip("C1", "A1")
 
 
+    machine.disconnect()
 
