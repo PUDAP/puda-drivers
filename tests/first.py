@@ -1,27 +1,61 @@
 """Test script for the First machine driver."""
+
+import random
+import logging
 from puda_drivers.machines import First
 from puda_drivers.labware import get_available_labware
+from puda_drivers.core import setup_logging
+
+setup_logging(
+    enable_file_logging=False,
+    log_level=logging.DEBUG,  # Use logging.DEBUG to see all (DEBUG, INFO, WARNING, ERROR, CRITICAL) logs
+)
 
 if __name__ == "__main__":
-    machine = First()
+    machine = First(
+        qubot_port="/dev/ttyACM0",
+        sartorius_port="/dev/ttyUSB0",
+    )
     
+    # View available labware
     print(get_available_labware())
 
     # Define deck layout declaratively and load all at once
-    machine.load_deck({
-        "A1": "opentrons_96_tiprack_300ul",
-        "B1": "opentrons_96_tiprack_300ul",
-        "C1": "trash_bin",
-        "D1": "opentrons_96_tiprack_300ul",
-    })
+    machine.load_deck(
+        {
+            "C1": "trash_bin",
+            "C2": "polyelectric_8_wellplate_30000ul",
+            "A3": "opentrons_96_tiprack_300ul",
+        }
+    )
 
+    # print(get_available_labware())
     print(machine.deck)
-    print(machine.deck["B1"].get_well_position("A1"))
+    print(machine.deck["C2"])
+
+    machine.connect()
+    machine.qubot.home()
+    machine.pipette.initialize()
     
-    # test
-    # machine.connect()
-    # machine.transfer(
-    #     amount=100, 
-    #     source=machine.deck["B1"].get_well_position("A1"), 
-    #     destination=machine.deck["C1"].get_well_position("A1")
-    # )
+    machine.attach_tip("A3", "G8")
+    machine.aspirate_from("C2", "A1", 100)
+    # machine.dispense_to("C2", "B4", 100)
+    # machine.drop_tip("C1", "A1")
+    # machine.attach_tip("A1", "D4")
+    # machine.drop_tip("C1", "A1")
+    
+    # tiprack_wells = machine.deck["A3"].wells
+    # # get pick up pipette one by one and drop it in the trash bin
+    # # use random.choice to get a random well from the tiprack
+    # for i in range(len(tiprack_wells)):
+    #     pickup_well = random.choice(tiprack_wells)
+    #     tiprack_wells.remove(pickup_well)
+    #     machine.attach_tip("A3", pickup_well)
+    #     aspirate_well = random.choice(machine.deck["C2"].wells)
+    #     machine.aspirate_from("C2", aspirate_well, 100)
+    #     dispense_well = random.choice(machine.deck["C2"].wells)
+    #     machine.dispense_to("C2", dispense_well, 100)
+    #     machine.drop_tip("C1", "A1")
+
+
+

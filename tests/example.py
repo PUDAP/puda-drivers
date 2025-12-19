@@ -7,17 +7,17 @@ Created on Wed Nov 19 15:29:02 2025
 
 
 # %%
-# import serial.tools.list_ports
-# ports = serial.tools.list_ports.comports()
-#
-# for port, desc, hwid in sorted(ports):
-#     print("{}: {} [{}]".format(port, desc, hwid))
+import serial.tools.list_ports
+ports = serial.tools.list_ports.comports()
+
+for port, desc, hwid in sorted(ports):
+    print("{}: {} [{}]".format(port, desc, hwid))
 
 # %% Open connection
 import serial
 import time
 
-qubot = serial.Serial("/dev/ttyACM0", 9600, dsrdtr=True)
+qubot = serial.Serial("/dev/ttyACM1", 9600, dsrdtr=True)
 qubot.flush()
 
 time.sleep(1)

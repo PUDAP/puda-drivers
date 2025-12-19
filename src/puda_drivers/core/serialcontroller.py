@@ -212,4 +212,19 @@ class SerialController(ABC):
             serial.SerialTimeoutException: If no response is received within timeout
         """
         self._send_command(self._build_command(command, value))
-        return self._read_response()
+        
+        # Increase timeout by 60 seconds for G28 (homing) command
+        original_timeout = self.timeout
+        if "G28" in command.upper():
+            self.timeout = original_timeout + 60
+            # Also update the serial connection's timeout if connected
+            if self.is_connected and self._serial:
+                self._serial.timeout = self.timeout
+        
+        try:
+            return self._read_response()
+        finally:
+            # Restore original timeout
+            self.timeout = original_timeout
+            if self.is_connected and self._serial:
+                self._serial.timeout = original_timeout

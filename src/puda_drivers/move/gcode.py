@@ -7,6 +7,7 @@ absolute coordinates, with relative moves converted to absolute internally.
 Supports homing and position synchronization.
 """
 
+import time
 import re
 import logging
 from dataclasses import dataclass
@@ -441,7 +442,7 @@ class GCodeController(SerialController):
         needs_y_move = abs(position.y - self._current_position.y) > self.TOLERANCE
         needs_z_move = abs(position.z - self._current_position.z) > self.TOLERANCE
         needs_a_move = abs(position.a - self._current_position.a) > self.TOLERANCE
-
+        
         if not (needs_x_move or needs_y_move or needs_z_move or needs_a_move):
             self._logger.warning(
                 "Move command issued without any axis movement. Skipping transmission."
@@ -456,10 +457,9 @@ class GCodeController(SerialController):
 
         # Step 0: Ensure absolute mode is active
         self.execute("G90")
-        needs_xy_move = needs_x_move or needs_y_move
 
         # Step 1: Move Z and A to SAFE_MOVE_HEIGHT if XY movement is needed
-        if needs_xy_move:
+        if needs_x_move or needs_y_move:
             self._logger.debug(
                 "Safe move: Raising Z and A to safe height (%s) before XY movement", self.SAFE_MOVE_HEIGHT
             )
@@ -470,8 +470,12 @@ class GCodeController(SerialController):
             self._current_position.a = self.SAFE_MOVE_HEIGHT
             self._logger.debug("Z and A moved to safe height (%s)", self.SAFE_MOVE_HEIGHT)
 
+            # update needs_z_move and needs_a_move based on the current position
+            needs_z_move = abs(position.z - self._current_position.z) > self.TOLERANCE
+            needs_a_move = abs(position.a - self._current_position.a) > self.TOLERANCE
+
         # Step 2: Move X, Y to target
-        if needs_xy_move:
+        if needs_x_move or needs_y_move:
             move_cmd = "G1"
             if needs_x_move:
                 move_cmd += f" X{position.x}"
@@ -493,19 +497,14 @@ class GCodeController(SerialController):
         if needs_z_move:
             move_cmd = f"G1 Z{position.z} F{self._z_feed}"
             self.execute(move_cmd)
+            self._wait_for_move()
             self._current_position.z = position.z
         elif needs_a_move:
             move_cmd = f"G1 A{position.a} F{self._z_feed}"
             self.execute(move_cmd)
+            self._wait_for_move()
             self._current_position.a = position.a
-        self._wait_for_move()
         self._logger.debug("New internal position: %s", self._current_position)
-
-        # Step 4: Post-move position synchronization check
-        self._sync_position()
-        self._logger.info(
-            "Move complete. Final position: %s\n", self._current_position
-        )
         
         return self._current_position
 

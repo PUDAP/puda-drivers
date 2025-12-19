@@ -34,6 +34,8 @@ def main():
         qubot.set_axis_limits("Z", -175, 0)
         qubot.set_axis_limits("A", -175, 0)
 
+        qubot.connect()
+
         # # Example: Get current axis limits
         # print("\n--- Current Axis Limits ---")
         # all_limits = qubot.get_axis_limits()
@@ -48,22 +50,22 @@ def main():
         # Always start with homing
         qubot.home()
 
-        # # Setting feed rate (aka move speed) 
+        # # Setting feed rate (aka move speed)
         # # Should generate WARNING due to exceeding MAX_FEEDRATE (3000)
         # qubot.feed = 5000
 
         # Relative moves are converted to absolute internally, but works the same
         # for anything in the -axis, will have to be moved individually, else error will be raised
-        qubot.move_absolute(position=Position(x=0.0, y=-50.0, a=-100.0))
-        
+        qubot.move_absolute(position=Position(x=0.0, y=-5.0, z=-175.0))
+
         # print("\n")
         # qubot.move_relative(x=10.0)
-        
+
         # Example stepping code
         # for _ in range(10):
         #     pos = qubot.move_relative(x=10.0)
         #     print(f"Position: {pos}")
-        
+
         # sync position is always called after move automatically (now private: _sync_position())
         # Position synchronization happens automatically after each move
 
@@ -81,21 +83,21 @@ def main():
         #     qubot.move_absolute(x=250.0)  # Raises ValueError if outside limits
         # except ValueError as e:
         #     print(f"Position validation error (expected): {e}")
-        
+
         # Example of relative move that would exceed limits
         # This will raise ValueError if the resulting absolute position is outside limits
         # try:
         #     qubot.move_relative(x=300.0)  # If current X + 300 > 200, raises ValueError
         # except ValueError as e:
         #     print(f"Position validation error (expected): {e}")
-        
+
         # Example of an ERROR - simultaneous Z and A movement
         # This will raise ValueError because Z and A cannot move at the same time
         # try:
         #     qubot.move_absolute(z=-10.0, a=-20.0)  # Raises ValueError if both Z and A are moved
         # except ValueError as e:
         #     print(f"Z/A simultaneous movement error (expected): {e}")
-        
+
         qubot.disconnect()
         print("Disconnected from qubot")
 

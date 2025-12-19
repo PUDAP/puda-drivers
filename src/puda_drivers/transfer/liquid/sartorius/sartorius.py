@@ -69,6 +69,8 @@ class SartoriusController(SerialController):
             baudrate,
             timeout,
         )
+        self._tip_attached: bool
+        self._volume: int = 0
 
     def _build_command(self, command: str, value: Optional[str] = None) -> str:
         """
@@ -143,6 +145,7 @@ class SartoriusController(SerialController):
         self._logger.info("** Initializing Pipette Head (RZ) **")
         self.execute(command="RZ")
         self._logger.info("** Pipette Initialization Complete **\n")
+        self.set_tip_attached(attached=False)
 
     def get_inward_speed(self) -> int:
         """
@@ -237,7 +240,7 @@ class SartoriusController(SerialController):
         self._logger.info("** Reached Position %s Successfully **\n", position)
         
     # instead of run_inward, use aspirate
-    def aspirate(self, amount: float) -> None:
+    def aspirate(self, amount: int) -> None:
         """
         Aspirate fluid from the current location.
 
@@ -255,9 +258,10 @@ class SartoriusController(SerialController):
         self._logger.info("** Aspirating %s uL (RI%s steps) **", amount, steps)
         self.execute(command="RI", value=str(steps))
         self._logger.info("** Aspirated %s uL Successfully **\n", amount)
+        self._volume += amount
 
     # instead of run_outward, use dispense
-    def dispense(self, amount: float) -> None:
+    def dispense(self, amount: int) -> None:
         """
         Dispense fluid at the current location.
 
@@ -275,6 +279,7 @@ class SartoriusController(SerialController):
         self._logger.info("** Dispensing %s uL (RO%s steps) **", amount, steps)
         self.execute(command="RO", value=str(steps))
         self._logger.info("** Dispensed %s uL Successfully **\n", amount)
+        self._volume -= amount
 
     def eject_tip(self, return_position: int = 30) -> None:
         """
@@ -287,7 +292,10 @@ class SartoriusController(SerialController):
             ValueError: If return_position has leading zeros
             SartoriusDeviceError: If tip ejection fails
         """
-        position_str = self._validate_no_leading_zeros(return_position, "RE")
+        position_str = self._validate_no_leading_zeros(
+            command_name="RE",
+            value=return_position
+        )
         self._logger.info(
             "** Ejecting Tip and returning to position %s (RE %s) **",
             return_position,
@@ -379,3 +387,21 @@ class SartoriusController(SerialController):
         response = self.execute(command="DN")
         self._logger.info("** Liquid Level: %s uL **\n", response)
         return response
+    
+    def is_tip_attached(self) -> bool:
+        """
+        Check if a tip is attached to the pipette (DS command).
+
+        Returns:
+            True if a tip is attached, False otherwise
+        """
+        return self._tip_attached
+    
+    def set_tip_attached(self, attached: bool) -> None:
+        """
+        Set the tip attached state (DS command).
+
+        Args:
+            attached: True if a tip is attached, False otherwise
+        """
+        self._tip_attached = attached

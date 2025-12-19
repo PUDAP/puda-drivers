@@ -33,34 +33,36 @@ class First:
     
     # origin position of Z and A axes
     Z_ORIGIN = Position(x=0, y=0, z=0)
-    A_ORIGIN = Position(x=0, y=0, a=0)
+    A_ORIGIN = Position(x=60, y=0, a=0)
     
     # Default axis limits - customize based on your hardware
     DEFAULT_AXIS_LIMITS = {
         "X": (0, 330),
         "Y": (-440, 0),
-        "Z": (-175, 0),
+        "Z": (-140, 0),
         "A": (-175, 0),
     }
     
+    # Height from z and a origin to the deck
+    CEILING_HEIGHT = 192.2
+    
+    # Tip length
+    TIP_LENGTH = 59
+    
     # Slot origins (the bottom left corner of the slot relative to the deck origin)
     SLOT_ORIGINS = {
-        "A1": Position(x=0, y=0),
-        "A2": Position(x=0, y=100),
-        "A3": Position(x=0, y=200),
-        "A4": Position(x=0, y=300),
-        "B1": Position(x=100, y=0),
-        "B2": Position(x=100, y=100),
-        "B3": Position(x=100, y=200),
-        "B4": Position(x=100, y=300),
-        "C1": Position(x=200, y=0),
-        "C2": Position(x=200, y=100),
-        "C3": Position(x=200, y=200),
-        "C4": Position(x=200, y=300),
-        "D1": Position(x=300, y=0),
-        "D2": Position(x=300, y=100),
-        "D3": Position(x=300, y=200),
-        "D4": Position(x=300, y=300),
+        "A1": Position(x=-2, y=-424),
+        "A2": Position(x=98, y=-424),
+        "A3": Position(x=198, y=-424),
+        "A4": Position(x=298, y=-424),
+        "B1": Position(x=-2, y=-274),
+        "B2": Position(x=98, y=-274),
+        "B3": Position(x=198, y=-274),
+        "B4": Position(x=298, y=-274),
+        "C1": Position(x=-2, y=-124),
+        "C2": Position(x=98, y=-124),
+        "C3": Position(x=198, y=-124),
+        "C4": Position(x=298, y=-124),
     }
     
     def __init__(
@@ -127,24 +129,58 @@ class First:
         for slot, labware_name in deck_layout.items():
             self.load_labware(slot=slot, labware_name=labware_name)
         
-    def move_z_to(self, slot: str, well: Optional[str] = None):
-        """Move the Z axis to a position."""
-        pos = self.get_absolute_position(slot, well)
-        # return the offset from the origin
-        self.qubot.move_absolute(position=pos - self.Z_ORIGIN)
+    def attach_tip(self, slot: str, well: Optional[str] = None):
+        """Attach a tip from a slot."""
+        if self.pipette.is_tip_attached():
+            raise ValueError("Tip already attached")
         
-    def move_a_to(self, slot: str, well: Optional[str] = None):
-        """Move the A axis to a position."""
-        pos = self.get_absolute_position(slot, well)
+        pos = self.get_absolute_z_position(slot, well)
         # return the offset from the origin
-        self.qubot.move_absolute(position=pos - self.A_ORIGIN)
+        self.qubot.move_absolute(position=pos)
         
-    def transfer(self, amount: float, source: Position, destination: Position):
-        """Transfer a volume of liquid from a source to a destination."""
-        self.qubot.move_absolute(position=source)
+        # attach tip (move slowly down)
+        self.qubot.move_relative(
+            position=Position(z=-self.deck[slot].get_insert_depth()),
+            feed=500
+        )
+        self.pipette.set_tip_attached(attached=True)
+        # must home Z axis after, as pressing in tip might cause it to lose steps
+        self.qubot.home(axis="Z")
+        
+    def drop_tip(self, slot: str, well: str):
+        """Drop a tip into a slot."""
+        if not self.pipette.is_tip_attached():
+            raise ValueError("Tip not attached")
+        
+        pos = self.get_absolute_z_position(slot, well)
+        # move up by the tip length
+        pos += Position(z=self.TIP_LENGTH)
+        print("moving Z to", pos)
+        self.qubot.move_absolute(position=pos)
+
+        self.pipette.eject_tip()
+        time.sleep(5)
+        self.pipette.set_tip_attached(attached=False)
+        
+    def aspirate_from(self, slot:str, well:str, amount:int):
+        """Aspirate a volume of liquid from a slot."""
+        if not self.pipette.is_tip_attached():
+            raise ValueError("Tip not attached")
+        
+        pos = self.get_absolute_z_position(slot, well)
+        print("moving Z to", pos)
+        self.qubot.move_absolute(position=pos)
         self.pipette.aspirate(amount=amount)
         time.sleep(5)
-        self.qubot.move_absolute(position=destination)
+        
+    def dispense_to(self, slot:str, well:str, amount:int):
+        """Dispense a volume of liquid to a slot."""
+        if not self.pipette.is_tip_attached():
+            raise ValueError("Tip not attached")
+        
+        pos = self.get_absolute_z_position(slot, well)
+        print("moving Z to", pos)
+        self.qubot.move_absolute(position=pos)
         self.pipette.dispense(amount=amount)
         time.sleep(5)
         
@@ -166,7 +202,7 @@ class First:
             raise KeyError(f"Invalid slot name: {slot}. Must be one of {list(self.SLOT_ORIGINS.keys())}")
         return self.SLOT_ORIGINS[slot]
     
-    def get_absolute_position(self, slot: str, well: Optional[str] = None) -> Position:
+    def get_absolute_z_position(self, slot: str, well: Optional[str] = None) -> Position:
         """
         Get the absolute position for a slot (and optionally a well within that slot) based on the origin
         
@@ -179,9 +215,28 @@ class First:
         """
         # Get slot origin
         pos = self.get_slot_origin(slot)
-        
-        # If well is specified, get well position relative to slot and add to slot origin
+
+        # relative well position from slot origin
         if well:
-            pos += self.deck[slot].get_well_position(well)
+            well_pos = self.deck[slot].get_well_position(well).get_xy()
+            # the deck is rotated 90 degrees clockwise for this machine
+            pos += well_pos.swap_xy()
+            # get z
+            z = Position(z=self.deck[slot].get_height() - self.CEILING_HEIGHT)
+            pos += z
+        return pos
+    
+    def get_absolute_a_position(self, slot: str, well: Optional[str] = None) -> Position:
+        """
+        Get the absolute position for a slot (and optionally a well within that slot) based on the origin
+        """
+        pos = self.get_slot_origin(slot)
         
+        if well:
+            well_pos = self.deck[slot].get_well_position(well).get_xy()
+            pos += well_pos.swap_xy()
+            
+            # get a
+            a = Position(a=self.deck[slot].get_height() - self.CEILING_HEIGHT)
+            pos += a
         return pos

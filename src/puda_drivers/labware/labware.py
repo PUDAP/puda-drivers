@@ -25,6 +25,18 @@ class StandardLabware(ABC):
         self.name = self._definition.get("metadata", {}).get("displayName", "displayName not found")
         self._wells = self._definition.get("wells", {})
 
+    @staticmethod
+    def get_available_labware() -> List[str]:
+        """
+        Get all available labware names from JSON definition files.
+        
+        Returns:
+            Sorted list of labware names (without .json extension) found in the labware directory.
+        """
+        labware_dir = Path(__file__).parent
+        json_files = sorted(labware_dir.glob("*.json"))
+        return [f.stem for f in json_files]
+
     def load_definition(self, file_name: str = "definition.json") -> Dict[str, Any]:
         """
         Load a definition.json file from the class's module directory.
@@ -52,7 +64,36 @@ class StandardLabware(ABC):
         
         with open(definition_path, "r", encoding="utf-8") as f:
             return json.load(f)
+        
+    def __str__(self):
+        """
+        Return a string representation of the labware.
+        """
+        lines = [
+            f"Labware name: {self.name}",
+            f"Height in mm: {self.get_height()}",
+            "Distances away from origin (0,0) for each well in mm"
+        ]
+        
+        for well_id, well_data in self._wells.items():
+            x, y, z = well_data.get("x"), well_data.get("y"), well_data.get("z")
 
+            if x is None or y is None or z is None:
+                raise KeyError(f"Well '{well_id}' has missing coordinates in labware definition")
+
+            lines.append(f"Well {well_id}: x:{x}, y:{y}, z:{z}")
+        return "\n".join(lines)
+
+    @property
+    def wells(self) -> List[str]:
+        """
+        Get a list of all well IDs in the labware.
+        
+        Returns:
+            List of well identifiers (e.g., ["A1", "A2", "B1", ...])
+        """
+        return list(self._wells.keys())
+    
     def get_well_position(self, well_id: str) -> Position:
         """
         Get the position of a well from definition.json.
@@ -81,14 +122,36 @@ class StandardLabware(ABC):
             z=well_data.get("z", 0.0), 
         )
         
-    @staticmethod
-    def get_available_labware() -> List[str]:
+    def get_height(self) -> float:
         """
-        Get all available labware names from JSON definition files.
+        Get the height of the labware.
         
         Returns:
-            Sorted list of labware names (without .json extension) found in the labware directory.
+            Height of the labware (zDimension)
+            
+        Raises:
+            KeyError: If dimensions or zDimension is not found in the definition
         """
-        labware_dir = Path(__file__).parent
-        json_files = sorted(labware_dir.glob("*.json"))
-        return [f.stem for f in json_files]
+        dimensions = self._definition.get("dimensions")
+        if dimensions is None:
+            raise KeyError("'dimensions' not found in labware definition")
+        
+        if "zDimension" not in dimensions:
+            raise KeyError("'zDimension' not found in labware dimensions")
+        
+        return dimensions["zDimension"]
+        
+    def get_insert_depth(self) -> float:
+        """
+        Get the insert depth of the labware.
+        
+        Returns:
+            Insert depth of the labware
+            
+        Raises:
+            KeyError: If insert_depth is not found in the definition
+        """
+        if "insert_depth" not in self._definition:
+            raise KeyError("'insert_depth' not found in labware definition")
+        
+        return self._definition["insert_depth"]

@@ -6,6 +6,7 @@ Provides JSON conversion, arithmetic operations, and dictionary/tuple compatibil
 """
 
 import json
+import copy
 from typing import Dict, Optional, Tuple, Union, Any
 
 
@@ -363,7 +364,15 @@ class Position:
     
     def copy(self) -> "Position":
         """Create a copy of this Position."""
-        result = Position()
-        result._axes = self._axes.copy()
-        return result
+        return copy.copy(self)
 
+    # swap x and y axes
+    def swap_xy(self) -> "Position":
+        """Swap x and y axes."""
+        self._axes["x"], self._axes["y"] = self._axes["y"], self._axes["x"]
+        return self
+    
+    # get x and y coordinates only
+    def get_xy(self) -> "Position":
+        """Get x and y coordinates only."""
+        return Position(x=self._axes["x"], y=self._axes["y"])
