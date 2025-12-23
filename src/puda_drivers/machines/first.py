@@ -7,6 +7,7 @@ This class demonstrates the integration of:
 - SartoriusController: Handles liquid handling operations
 """
 
+import logging
 import time
 from typing import Optional, Dict, Tuple, Type, Union
 from puda_drivers.move import GCodeController, Deck
@@ -108,21 +109,36 @@ class First:
             camera_index=camera_index if camera_index is not None else self.DEFAULT_CAMERA_INDEX,
         )
         
+        # Initialize logger
+        self._logger = logging.getLogger(__name__)
+        self._logger.info(
+            "First machine initialized with qubot_port='%s', sartorius_port='%s', camera_index=%s",
+            qubot_port or self.DEFAULT_QUBOT_PORT,
+            sartorius_port or self.DEFAULT_SARTORIUS_PORT,
+            camera_index if camera_index is not None else self.DEFAULT_CAMERA_INDEX,
+        )
+        
     def connect(self):
         """Connect all controllers."""
+        self._logger.info("Connecting all controllers")
         self.qubot.connect()
         self.pipette.connect()
         self.camera.connect()
+        self._logger.info("All controllers connected successfully")
         
     def disconnect(self):
         """Disconnect all controllers."""
+        self._logger.info("Disconnecting all controllers")
         self.qubot.disconnect()
         self.pipette.disconnect()
         self.camera.disconnect()
+        self._logger.info("All controllers disconnected successfully")
         
     def load_labware(self, slot: str, labware_name: str):
         """Load a labware object into a slot."""
+        self._logger.info("Loading labware '%s' into slot '%s'", labware_name, slot)
         self.deck.load_labware(slot=slot, labware_name=labware_name)
+        self._logger.debug("Labware '%s' loaded into slot '%s'", labware_name, slot)
     
     def load_deck(self, deck_layout: Dict[str, Type[StandardLabware]]):
         """
@@ -139,63 +155,84 @@ class First:
                 "C1": Rubbish,
             })
         """
+        self._logger.info("Loading deck layout with %d labware items", len(deck_layout))
         for slot, labware_name in deck_layout.items():
             self.load_labware(slot=slot, labware_name=labware_name)
+        self._logger.info("Deck layout loaded successfully")
         
     def attach_tip(self, slot: str, well: Optional[str] = None):
         """Attach a tip from a slot."""
         if self.pipette.is_tip_attached():
+            self._logger.error("Cannot attach tip: tip already attached")
             raise ValueError("Tip already attached")
         
+        self._logger.info("Attaching tip from slot '%s'%s", slot, f", well '{well}'" if well else "")
         pos = self.get_absolute_z_position(slot, well)
+        self._logger.debug("Moving to position %s for tip attachment", pos)
         # return the offset from the origin
         self.qubot.move_absolute(position=pos)
         
         # attach tip (move slowly down)
+        insert_depth = self.deck[slot].get_insert_depth()
+        self._logger.debug("Moving down by %s mm to insert tip", insert_depth)
         self.qubot.move_relative(
-            position=Position(z=-self.deck[slot].get_insert_depth()),
+            position=Position(z=-insert_depth),
             feed=500
         )
         self.pipette.set_tip_attached(attached=True)
+        self._logger.info("Tip attached successfully, homing Z axis")
         # must home Z axis after, as pressing in tip might cause it to lose steps
         self.qubot.home(axis="Z")
+        self._logger.debug("Z axis homed after tip attachment")
         
     def drop_tip(self, slot: str, well: str):
         """Drop a tip into a slot."""
         if not self.pipette.is_tip_attached():
+            self._logger.error("Cannot drop tip: no tip attached")
             raise ValueError("Tip not attached")
         
+        self._logger.info("Dropping tip into slot '%s', well '%s'", slot, well)
         pos = self.get_absolute_z_position(slot, well)
         # move up by the tip length
         pos += Position(z=self.TIP_LENGTH)
-        print("moving Z to", pos)
+        self._logger.debug("Moving to position %s (adjusted for tip length) for tip drop", pos)
         self.qubot.move_absolute(position=pos)
 
+        self._logger.debug("Ejecting tip")
         self.pipette.eject_tip()
         time.sleep(5)
         self.pipette.set_tip_attached(attached=False)
+        self._logger.info("Tip dropped successfully")
         
     def aspirate_from(self, slot:str, well:str, amount:int):
         """Aspirate a volume of liquid from a slot."""
         if not self.pipette.is_tip_attached():
+            self._logger.error("Cannot aspirate: no tip attached")
             raise ValueError("Tip not attached")
         
+        self._logger.info("Aspirating %d µL from slot '%s', well '%s'", amount, slot, well)
         pos = self.get_absolute_z_position(slot, well)
-        print("moving Z to", pos)
+        self._logger.debug("Moving Z axis to position %s", pos)
         self.qubot.move_absolute(position=pos)
+        self._logger.debug("Aspirating %d µL", amount)
         self.pipette.aspirate(amount=amount)
         time.sleep(5)
+        self._logger.info("Aspiration completed: %d µL from slot '%s', well '%s'", amount, slot, well)
         
     def dispense_to(self, slot:str, well:str, amount:int):
         """Dispense a volume of liquid to a slot."""
         if not self.pipette.is_tip_attached():
+            self._logger.error("Cannot dispense: no tip attached")
             raise ValueError("Tip not attached")
         
+        self._logger.info("Dispensing %d µL to slot '%s', well '%s'", amount, slot, well)
         pos = self.get_absolute_z_position(slot, well)
-        print("moving Z to", pos)
+        self._logger.debug("Moving Z axis to position %s", pos)
         self.qubot.move_absolute(position=pos)
+        self._logger.debug("Dispensing %d µL", amount)
         self.pipette.dispense(amount=amount)
         time.sleep(5)
+        self._logger.info("Dispense completed: %d µL to slot '%s', well '%s'", amount, slot, well)
         
     def get_slot_origin(self, slot: str) -> Position:
         """
@@ -212,8 +249,11 @@ class First:
         """
         slot = slot.upper()
         if slot not in self.SLOT_ORIGINS:
+            self._logger.error("Invalid slot name: '%s'. Must be one of %s", slot, list(self.SLOT_ORIGINS.keys()))
             raise KeyError(f"Invalid slot name: {slot}. Must be one of {list(self.SLOT_ORIGINS.keys())}")
-        return self.SLOT_ORIGINS[slot]
+        pos = self.SLOT_ORIGINS[slot]
+        self._logger.debug("Slot origin for '%s': %s", slot, pos)
+        return pos
     
     def get_absolute_z_position(self, slot: str, well: Optional[str] = None) -> Position:
         """
@@ -237,6 +277,9 @@ class First:
             # get z
             z = Position(z=self.deck[slot].get_height() - self.CEILING_HEIGHT)
             pos += z
+            self._logger.debug("Absolute Z position for slot '%s', well '%s': %s", slot, well, pos)
+        else:
+            self._logger.debug("Absolute Z position for slot '%s': %s", slot, pos)
         return pos
     
     def get_absolute_a_position(self, slot: str, well: Optional[str] = None) -> Position:
@@ -252,4 +295,7 @@ class First:
             # get a
             a = Position(a=self.deck[slot].get_height() - self.CEILING_HEIGHT)
             pos += a
+            self._logger.debug("Absolute A position for slot '%s', well '%s': %s", slot, well, pos)
+        else:
+            self._logger.debug("Absolute A position for slot '%s': %s", slot, pos)
         return pos

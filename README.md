@@ -59,160 +59,96 @@ setup_logging(
 
 When file logging is enabled, logs are saved to timestamped files (unless a custom name is provided) in the `logs/` folder. The logs folder is created automatically if it doesn't exist.
 
-### Gantry Control (GCode)
+### First Machine Example
+
+The `First` machine integrates motion control, deck management, liquid handling, and camera capabilities:
 
 ```python
-from puda_drivers.move import GCodeController
+import logging
+from puda_drivers.machines import First
+from puda_drivers.core.logging import setup_logging
 
-# Initialize and connect to a G-code device
-gantry = GCodeController(port_name="/dev/ttyACM0", feed=3000)
-gantry.connect()
+# Configure logging
+setup_logging(
+    enable_file_logging=False,
+    log_level=logging.DEBUG,
+)
 
-# Configure axis limits for safety (recommended)
-gantry.set_axis_limits("X", 0, 200)
-gantry.set_axis_limits("Y", -200, 0)
-gantry.set_axis_limits("Z", -100, 0)
-gantry.set_axis_limits("A", -180, 180)
+# Initialize the First machine
+machine = First(
+    qubot_port="/dev/ttyACM0",
+    sartorius_port="/dev/ttyUSB0",
+    camera_index=0,
+)
+
+# Connect all devices
+machine.connect()
 
 # Home the gantry
-gantry.home()
+machine.qubot.home()
 
-# Move to absolute position (validated against limits)
-gantry.move_absolute(x=50.0, y=-100.0, z=-10.0)
+# Initialize the pipette
+machine.pipette.initialize()
 
-# Move relative to current position (validated after conversion to absolute)
-gantry.move_relative(x=20.0, y=-10.0)
+# Load labware onto the deck
+machine.load_deck({
+    "C1": "trash_bin",
+    "C2": "polyelectric_8_wellplate_30000ul",
+    "A3": "opentrons_96_tiprack_300ul",
+})
 
-# Query current position
-position = gantry.query_position()
-print(f"Current position: {position}")
+# Start video recording
+machine.camera.start_video_recording()
 
-# Disconnect when done
-gantry.disconnect()
+# Perform liquid handling operations
+machine.attach_tip(slot="A3", well="G8")
+machine.aspirate_from(slot="C2", well="A1", amount=100)
+machine.dispense_to(slot="C2", well="B4", amount=100)
+machine.drop_tip(slot="C1", well="A1")
+
+# Stop video recording
+machine.camera.stop_video_recording()
+
+# Disconnect all devices
+machine.disconnect()
 ```
 
-**Axis Limits and Validation**: The `move_absolute()` and `move_relative()` methods automatically validate that target positions are within configured axis limits. If a position is outside the limits, a `ValueError` is raised before any movement is executed. Use `set_axis_limits()` to configure limits for each axis.
-
-### Liquid Handling (Sartorius)
+**Discovering Available Methods**: To explore what methods are available on any class instance, you can use Python's built-in `help()` function:
 
 ```python
-from puda_drivers.transfer.liquid.sartorius import SartoriusController
-
-# Initialize and connect to pipette
-pipette = SartoriusController(port_name="/dev/ttyUSB0")
-pipette.connect()
-pipette.initialize()
-
-# Attach tip
-pipette.attach_tip()
-
-# Aspirate liquid
-pipette.aspirate(amount=50.0)  # 50 µL
-
-# Dispense liquid
-pipette.dispense(amount=50.0)
-
-# Eject tip
-pipette.eject_tip()
-
-# Disconnect when done
-pipette.disconnect()
+machine = First()
+help(machine)  # See methods for the First machine
+help(machine.qubot)  # See GCodeController methods
+help(machine.pipette)  # See SartoriusController methods
+help(machine.camera)  # See CameraController methods
 ```
 
-### Combined Workflow
-
-```python
-from puda_drivers.move import GCodeController
-from puda_drivers.transfer.liquid.sartorius import SartoriusController
-
-# Initialize both devices
-gantry = GCodeController(port_name="/dev/ttyACM0")
-pipette = SartoriusController(port_name="/dev/ttyUSB0")
-
-gantry.connect()
-pipette.connect()
-
-# Move to source well
-gantry.move_absolute(x=50.0, y=-50.0, z=-20.0)
-pipette.aspirate(amount=50.0)
-
-# Move to destination well
-gantry.move_absolute(x=150.0, y=-150.0, z=-20.0)
-pipette.dispense(amount=50.0)
-
-# Cleanup
-pipette.eject_tip()
-gantry.disconnect()
-pipette.disconnect()
-```
+Alternatively, you can read the source code directly in the `src/puda_drivers/` directory.
 
 ## Device Support
 
-### Motion Systems
+The following device types are supported:
 
-- **QuBot** (GCode) - Multi-axis gantry systems compatible with G-code commands
-  - Supports X, Y, Z, and A axes
-  - Configurable feed rates
-  - Position synchronization and homing
-  - Automatic axis limit validation for safe operation
-
-### Liquid Handling
-
+- **GCode** - G-code compatible motion systems (e.g., QuBot)
 - **Sartorius rLINE®** - Electronic pipettes and robotic dispensers
-  - Aspirate and dispense operations
-  - Tip attachment and ejection
-  - Configurable speeds and volumes
+- **Camera** - Webcams and USB cameras for image and video capture
 
-## Error Handling
-
-### Axis Limit Validation
-
-Both `move_absolute()` and `move_relative()` validate positions against configured axis limits before executing any movement. If a position is outside the limits, a `ValueError` is raised:
-
-```python
-from puda_drivers.move import GCodeController
-
-gantry = GCodeController(port_name="/dev/ttyACM0")
-gantry.connect()
-
-# Set axis limits
-gantry.set_axis_limits("X", 0, 200)
-gantry.set_axis_limits("Y", -200, 0)
-
-try:
-    # This will raise ValueError: Value 250 outside axis limits [0, 200]
-    gantry.move_absolute(x=250.0, y=-50.0)
-except ValueError as e:
-    print(f"Move rejected: {e}")
-
-# Relative moves are also validated after conversion to absolute positions
-try:
-    # If current X is 150, moving 100 more would exceed the limit
-    gantry.move_relative(x=100.0)
-except ValueError as e:
-    print(f"Move rejected: {e}")
-```
-
-Validation errors are automatically logged at the ERROR level before the exception is raised.
-
-### Logging Best Practices
+## Logging Best Practices
 
 For production applications, configure logging at the start of your script:
 
 ```python
 import logging
 from puda_drivers.core.logging import setup_logging
-from puda_drivers.move import GCodeController
 
 # Configure logging first, before initializing devices
 setup_logging(
     enable_file_logging=True,
     log_level=logging.INFO,
-    log_file_name="gantry_operation"
+    log_file_name="experiment"
 )
 
 # Now all device operations will be logged
-gantry = GCodeController(port_name="/dev/ttyACM0")
 # ... rest of your code
 ```
 
@@ -243,6 +179,8 @@ sartorius_ports = list_serial_ports(filter_desc="Sartorius")
 ## Development
 
 ### Setup Development Environment
+
+First, install `uv` if you haven't already. See the [uv installation guide](https://docs.astral.sh/uv/getting-started/installation/) for platform-specific instructions.
 
 ```bash
 # Create virtual environment
