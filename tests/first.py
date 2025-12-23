@@ -12,9 +12,11 @@ setup_logging(
 )
 
 if __name__ == "__main__":
+    # Connect machine
     machine = First(
         qubot_port="/dev/ttyACM0",
         sartorius_port="/dev/ttyUSB0",
+        camera_index=0,
     )
     
     # View available labware
@@ -36,6 +38,7 @@ if __name__ == "__main__":
     machine.qubot.home()
     machine.pipette.initialize()
     
+    machine.camera.start_video_recording()
     machine.attach_tip(slot="A3", well="G8")
     machine.aspirate_from(slot="C2", well="A1", amount=100)
     machine.dispense_to(slot="C2", well="B4", amount=100)
@@ -55,5 +58,7 @@ if __name__ == "__main__":
     #     machine.drop_tip("C1", "A1")
 
 
+    machine.camera.stop_video_recording()
+    
+    # Disconnect machine
     machine.disconnect()
-

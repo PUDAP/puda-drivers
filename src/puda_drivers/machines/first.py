@@ -8,16 +8,17 @@ This class demonstrates the integration of:
 """
 
 import time
-from typing import Optional, Dict, Tuple, Type
+from typing import Optional, Dict, Tuple, Type, Union
 from puda_drivers.move import GCodeController, Deck
 from puda_drivers.core import Position
 from puda_drivers.transfer.liquid.sartorius import SartoriusController
 from puda_drivers.labware import StandardLabware
+from puda_drivers.cv import CameraController
 
 
 class First:
     """
-    First machine class integrating motion control, deck management, and liquid handling.
+    First machine class integrating motion control, deck management, liquid handling, and camera.
     
     The deck has 16 slots arranged in a 4x4 grid (A1-D4).
     Each slot's origin location is stored for absolute movement calculation.
@@ -30,6 +31,8 @@ class First:
     
     DEFAULT_SARTORIUS_PORT = "/dev/ttyUSB0"
     DEFAULT_SARTORIUS_BAUDRATE = 9600
+    
+    DEFAULT_CAMERA_INDEX = 0
     
     # origin position of Z and A axes
     Z_ORIGIN = Position(x=0, y=0, z=0)
@@ -69,6 +72,7 @@ class First:
         self,
         qubot_port: Optional[str] = None,
         sartorius_port: Optional[str] = None,
+        camera_index: Optional[Union[int, str]] = None,
         axis_limits: Optional[Dict[str, Tuple[float, float]]] = None,
     ):
         """
@@ -77,6 +81,8 @@ class First:
         Args:
             qubot_port: Serial port for GCodeController (e.g., '/dev/ttyACM0')
             sartorius_port: Serial port for SartoriusController (e.g., '/dev/ttyUSB0')
+            camera_index: Camera device index (0 for default) or device path/identifier.
+                         Defaults to 0.
             axis_limits: Dictionary mapping axis names to (min, max) limits.
                         Defaults to DEFAULT_AXIS_LIMITS.
         """
@@ -97,15 +103,22 @@ class First:
             port_name=sartorius_port or self.DEFAULT_SARTORIUS_PORT,
         )
         
+        # Initialize camera
+        self.camera = CameraController(
+            camera_index=camera_index if camera_index is not None else self.DEFAULT_CAMERA_INDEX,
+        )
+        
     def connect(self):
         """Connect all controllers."""
         self.qubot.connect()
         self.pipette.connect()
+        self.camera.connect()
         
     def disconnect(self):
         """Disconnect all controllers."""
         self.qubot.disconnect()
         self.pipette.disconnect()
+        self.camera.disconnect()
         
     def load_labware(self, slot: str, labware_name: str):
         """Load a labware object into a slot."""
