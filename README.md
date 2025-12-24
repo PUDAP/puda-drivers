@@ -64,6 +64,7 @@ When file logging is enabled, logs are saved to timestamped files (unless a cust
 The `First` machine integrates motion control, deck management, liquid handling, and camera capabilities:
 
 ```python
+import time
 import logging
 from puda_drivers.machines import First
 from puda_drivers.core.logging import setup_logging
@@ -89,6 +90,7 @@ machine.qubot.home()
 
 # Initialize the pipette
 machine.pipette.initialize()
+time.sleep(5)
 
 # Load labware onto the deck
 machine.load_deck({
@@ -102,9 +104,9 @@ machine.camera.start_video_recording()
 
 # Perform liquid handling operations
 machine.attach_tip(slot="A3", well="G8")
-machine.aspirate_from(slot="C2", well="A1", amount=100)
-machine.dispense_to(slot="C2", well="B4", amount=100)
-machine.drop_tip(slot="C1", well="A1")
+machine.aspirate_from(slot="C2", well="A1", amount=100, height_from_bottom=10.0)
+machine.dispense_to(slot="C2", well="B4", amount=100, height_from_bottom=30.0)
+machine.drop_tip(slot="C1", well="A1", height_from_bottom=10)
 
 # Stop video recording
 machine.camera.stop_video_recording()

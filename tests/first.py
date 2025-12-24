@@ -1,6 +1,7 @@
 """Test script for the First machine driver."""
 
 import random
+import time
 import logging
 from puda_drivers.machines import First
 from puda_drivers.labware import get_available_labware
@@ -8,7 +9,7 @@ from puda_drivers.core import setup_logging
 
 setup_logging(
     enable_file_logging=False,
-    log_level=logging.DEBUG,  # Use logging.DEBUG to see all (DEBUG, INFO, WARNING, ERROR, CRITICAL) logs
+    log_level=logging.INFO,  # Use logging.DEBUG to see all (DEBUG, INFO, WARNING, ERROR, CRITICAL) logs
 )
 
 if __name__ == "__main__":
@@ -36,13 +37,15 @@ if __name__ == "__main__":
 
     machine.connect()
     machine.qubot.home()
+    # all pipette operations need to wait for 5 seconds for completion
     machine.pipette.initialize()
+    time.sleep(5)
     
     machine.camera.start_video_recording()
     machine.attach_tip(slot="A3", well="G8")
-    machine.aspirate_from(slot="C2", well="A1", amount=100)
-    machine.dispense_to(slot="C2", well="B4", amount=100)
-    machine.drop_tip(slot="C1", well="A1")
+    machine.aspirate_from(slot="C2", well="A1", amount=100, height_from_bottom=10)
+    machine.dispense_to(slot="C2", well="B4", amount=100, height_from_bottom=50)
+    machine.drop_tip(slot="C1", well="A1", height_from_bottom=10)
     
     # tiprack_wells = machine.deck["A3"].wells
     # # get pick up pipette one by one and drop it in the trash bin

@@ -185,14 +185,30 @@ class First:
         self.qubot.home(axis="Z")
         self._logger.debug("Z axis homed after tip attachment")
         
-    def drop_tip(self, slot: str, well: str):
-        """Drop a tip into a slot."""
+    def drop_tip(self, slot: str, well: str, height_from_bottom: float = 0.0):
+        """
+        Drop a tip into a slot.
+        
+        Args:
+            slot: Slot name (e.g., 'A1', 'B2')
+            well: Well name within the slot (e.g., 'A1' for a well in a tiprack)
+            height_from_bottom: Height from the bottom of the well in mm. Defaults to 0.0.
+                               Positive values move up from the bottom. Negative values
+                               may cause a ValueError if the resulting position is outside
+                               the Z axis limits.
+        
+        Raises:
+            ValueError: If no tip is attached, or if the resulting position is outside
+                       the Z axis limits.
+        """
         if not self.pipette.is_tip_attached():
             self._logger.error("Cannot drop tip: no tip attached")
             raise ValueError("Tip not attached")
         
         self._logger.info("Dropping tip into slot '%s', well '%s'", slot, well)
         pos = self.get_absolute_z_position(slot, well)
+        # add height from bottom
+        pos += Position(z=height_from_bottom)
         # move up by the tip length
         pos += Position(z=self.TIP_LENGTH)
         self._logger.debug("Moving to position %s (adjusted for tip length) for tip drop", pos)
@@ -204,31 +220,67 @@ class First:
         self.pipette.set_tip_attached(attached=False)
         self._logger.info("Tip dropped successfully")
         
-    def aspirate_from(self, slot:str, well:str, amount:int):
-        """Aspirate a volume of liquid from a slot."""
+    def aspirate_from(self, slot:str, well:str, amount:int, height_from_bottom: float = 0.0):
+        """
+        Aspirate a volume of liquid from a slot.
+        
+        Args:
+            slot: Slot name (e.g., 'A1', 'B2')
+            well: Well name within the slot (e.g., 'A1')
+            amount: Volume to aspirate in µL
+            height_from_bottom: Height from the bottom of the well in mm. Defaults to 0.0.
+                               Positive values move up from the bottom. Negative values
+                               may cause a ValueError if the resulting position is outside
+                               the Z axis limits.
+        
+        Raises:
+            ValueError: If no tip is attached, or if the resulting position is outside
+                       the Z axis limits.
+        """
         if not self.pipette.is_tip_attached():
             self._logger.error("Cannot aspirate: no tip attached")
             raise ValueError("Tip not attached")
         
         self._logger.info("Aspirating %d µL from slot '%s', well '%s'", amount, slot, well)
         pos = self.get_absolute_z_position(slot, well)
+        # add height from bottom
+        pos += Position(z=height_from_bottom)
         self._logger.debug("Moving Z axis to position %s", pos)
         self.qubot.move_absolute(position=pos)
+
         self._logger.debug("Aspirating %d µL", amount)
         self.pipette.aspirate(amount=amount)
         time.sleep(5)
         self._logger.info("Aspiration completed: %d µL from slot '%s', well '%s'", amount, slot, well)
         
-    def dispense_to(self, slot:str, well:str, amount:int):
-        """Dispense a volume of liquid to a slot."""
+    def dispense_to(self, slot:str, well:str, amount:int, height_from_bottom: float = 0.0):
+        """
+        Dispense a volume of liquid to a slot.
+        
+        Args:
+            slot: Slot name (e.g., 'A1', 'B2')
+            well: Well name within the slot (e.g., 'A1')
+            amount: Volume to dispense in µL
+            height_from_bottom: Height from the bottom of the well in mm. Defaults to 0.0.
+                               Positive values move up from the bottom. Negative values
+                               may cause a ValueError if the resulting position is outside
+                               the Z axis limits.
+        
+        Raises:
+            ValueError: If no tip is attached, or if the resulting position is outside
+                       the Z axis limits.
+        """
         if not self.pipette.is_tip_attached():
             self._logger.error("Cannot dispense: no tip attached")
             raise ValueError("Tip not attached")
         
         self._logger.info("Dispensing %d µL to slot '%s', well '%s'", amount, slot, well)
         pos = self.get_absolute_z_position(slot, well)
+        # add height from bottom
+        pos += Position(z=height_from_bottom)
         self._logger.debug("Moving Z axis to position %s", pos)
         self.qubot.move_absolute(position=pos)
+
         self._logger.debug("Dispensing %d µL", amount)
         self.pipette.dispense(amount=amount)
         time.sleep(5)
@@ -275,8 +327,7 @@ class First:
             # the deck is rotated 90 degrees clockwise for this machine
             pos += well_pos.swap_xy()
             # get z
-            z = Position(z=self.deck[slot].get_height() - self.CEILING_HEIGHT)
-            pos += z
+            pos += Position(z=self.deck[slot].get_height() - self.CEILING_HEIGHT)
             self._logger.debug("Absolute Z position for slot '%s', well '%s': %s", slot, well, pos)
         else:
             self._logger.debug("Absolute Z position for slot '%s': %s", slot, pos)
