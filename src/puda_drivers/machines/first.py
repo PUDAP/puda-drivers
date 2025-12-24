@@ -9,7 +9,9 @@ This class demonstrates the integration of:
 
 import logging
 import time
+from pathlib import Path
 from typing import Optional, Dict, Tuple, Type, Union
+import numpy as np
 from puda_drivers.move import GCodeController, Deck
 from puda_drivers.core import Position
 from puda_drivers.transfer.liquid.sartorius import SartoriusController
@@ -118,21 +120,44 @@ class First:
             camera_index if camera_index is not None else self.DEFAULT_CAMERA_INDEX,
         )
         
-    def connect(self):
-        """Connect all controllers."""
-        self._logger.info("Connecting all controllers")
+    def startup(self):
+        """
+        Start up the machine by connecting all controllers and initializing subsystems.
+        
+        This method:
+        - Connects to all controllers (gantry, pipette, camera)
+        - Homes the gantry to establish a known position
+        - Initializes the pipette to reset it to a known state
+        
+        The machine is ready for operations after this method completes.
+        """
+        self._logger.info("Starting up machine and connecting all controllers")
         self.qubot.connect()
         self.pipette.connect()
         self.camera.connect()
         self._logger.info("All controllers connected successfully")
         
-    def disconnect(self):
-        """Disconnect all controllers."""
-        self._logger.info("Disconnecting all controllers")
+        # Home the gantry to establish known position
+        self._logger.info("Homing gantry...")
+        self.qubot.home()
+        
+        # Initialize the pipette (all pipette operations need to wait 5 seconds for completion)
+        self._logger.info("Initializing pipette...")
+        self.pipette.initialize()
+        time.sleep(5)
+        self._logger.info("Machine startup complete - ready for operations")
+        
+    def shutdown(self):
+        """
+        Gracefully shut down the machine by disconnecting all controllers.
+        
+        This method ensures all connections are properly closed and resources are released.
+        """
+        self._logger.info("Shutting down machine and disconnecting all controllers")
         self.qubot.disconnect()
         self.pipette.disconnect()
         self.camera.disconnect()
-        self._logger.info("All controllers disconnected successfully")
+        self._logger.info("Machine shutdown complete")
         
     def load_labware(self, slot: str, labware_name: str):
         """Load a labware object into a slot."""
@@ -350,3 +375,86 @@ class First:
         else:
             self._logger.debug("Absolute A position for slot '%s': %s", slot, pos)
         return pos
+    
+    def start_video_recording(
+        self,
+        filename: Optional[Union[str, Path]] = None,
+        fps: Optional[float] = None
+    ) -> Path:
+        """
+        Start recording a video.
+        
+        Args:
+            filename: Optional filename for the video. If not provided, a timestamped
+                    filename will be generated. If provided without extension, .mp4 will be added.
+            fps: Optional frames per second for the video. Defaults to 30.0 if not specified.
+        
+        Returns:
+            Path to the video file where recording is being saved
+            
+        Raises:
+            IOError: If camera is not connected or recording fails to start
+            ValueError: If already recording
+        """
+        return self.camera.start_video_recording(filename=filename, fps=fps)
+    
+    def stop_video_recording(self) -> Optional[Path]:
+        """
+        Stop recording a video.
+        
+        Returns:
+            Path to the saved video file, or None if no recording was in progress
+            
+        Raises:
+            IOError: If video writer fails to release
+        """
+        return self.camera.stop_video_recording()
+    
+    def record_video(
+        self,
+        duration_seconds: float,
+        filename: Optional[Union[str, Path]] = None,
+        fps: Optional[float] = None
+    ) -> Path:
+        """
+        Record a video for a specified duration.
+        
+        Args:
+            duration_seconds: Duration of the video in seconds
+            filename: Optional filename for the video. If not provided, a timestamped
+                    filename will be generated. If provided without extension, .mp4 will be added.
+            fps: Optional frames per second for the video. Defaults to 30.0 if not specified.
+        
+        Returns:
+            Path to the saved video file
+            
+        Raises:
+            IOError: If camera is not connected or recording fails
+        """
+        return self.camera.record_video(
+            duration_seconds=duration_seconds,
+            filename=filename,
+            fps=fps
+        )
+    
+    def capture_image(
+        self, 
+        save: bool = False, 
+        filename: Optional[Union[str, Path]] = None
+    ) -> np.ndarray:
+        """
+        Capture a single image from the camera.
+        
+        Args:
+            save: If True, save the image to the captures folder
+            filename: Optional filename for the saved image. If not provided and save=True,
+                     a timestamped filename will be generated. If provided without extension,
+                     .jpg will be added.
+        
+        Returns:
+            Captured image as a numpy array (BGR format)
+            
+        Raises:
+            IOError: If camera is not connected or capture fails
+        """
+        return self.camera.capture_image(save=save, filename=filename)

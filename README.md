@@ -82,15 +82,8 @@ machine = First(
     camera_index=0,
 )
 
-# Connect all devices
-machine.connect()
-
-# Home the gantry
-machine.qubot.home()
-
-# Initialize the pipette
-machine.pipette.initialize()
-time.sleep(5)
+# Start up the machine (connects all controllers, homes gantry, and initializes pipette)
+machine.startup()
 
 # Load labware onto the deck
 machine.load_deck({
@@ -100,7 +93,7 @@ machine.load_deck({
 })
 
 # Start video recording
-machine.camera.start_video_recording()
+machine.start_video_recording()
 
 # Perform liquid handling operations
 machine.attach_tip(slot="A3", well="G8")
@@ -109,10 +102,10 @@ machine.dispense_to(slot="C2", well="B4", amount=100, height_from_bottom=30.0)
 machine.drop_tip(slot="C1", well="A1", height_from_bottom=10)
 
 # Stop video recording
-machine.camera.stop_video_recording()
+machine.stop_video_recording()
 
-# Disconnect all devices
-machine.disconnect()
+# Shutdown the machine (gracefully disconnects all controllers)
+machine.shutdown()
 ```
 
 **Discovering Available Methods**: To explore what methods are available on any class instance, you can use Python's built-in `help()` function:

@@ -35,15 +35,13 @@ if __name__ == "__main__":
     print(machine.deck)
     print(machine.deck["C2"])
 
-    machine.connect()
-    machine.qubot.home()
-    # all pipette operations need to wait for 5 seconds for completion
-    machine.pipette.initialize()
-    time.sleep(5)
+    machine.startup()  # Connects all controllers, homes gantry, and initializes pipette
     
-    machine.camera.start_video_recording()
+    # machine.record_video(duration_seconds=10, filename="test.mp4")
+    machine.start_video_recording()
     machine.attach_tip(slot="A3", well="G8")
     machine.aspirate_from(slot="C2", well="A1", amount=100, height_from_bottom=10)
+    # machine.capture_image()
     machine.dispense_to(slot="C2", well="B4", amount=100, height_from_bottom=50)
     machine.drop_tip(slot="C1", well="A1", height_from_bottom=10)
     
@@ -61,7 +59,7 @@ if __name__ == "__main__":
     #     machine.drop_tip("C1", "A1")
 
 
-    machine.camera.stop_video_recording()
+    machine.stop_video_recording()
     
-    # Disconnect machine
-    machine.disconnect()
+    # Shutdown machine
+    machine.shutdown()
