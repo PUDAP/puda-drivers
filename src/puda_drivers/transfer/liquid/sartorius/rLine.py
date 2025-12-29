@@ -69,7 +69,7 @@ class SartoriusController(SerialController):
             baudrate,
             timeout,
         )
-        self._tip_attached: bool
+        self._tip_attached: bool = False
         self._volume: int = 0
 
     def _build_command(self, command: str, value: Optional[str] = None) -> str:

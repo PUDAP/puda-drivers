@@ -1,4 +1,3 @@
-import time 
 import asyncio
 import logging
 from contextlib import asynccontextmanager
@@ -11,6 +10,7 @@ logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
+logging.getLogger("puda_drivers").setLevel(logging.WARNING)
 logger = logging.getLogger(__name__)
 
 MACHINE_ID = "test-machine"
@@ -39,7 +39,7 @@ async def execution_lifecycle(client: NATSMachineClient, run_id: str, command: s
         yield  # This is where the actual command runs
         
         # Success path
-        await client.publish_status({'state': final_state, 'run_id': run_id})
+        await client.publish_status({'state': final_state, 'run_id': None})
         await client.publish_log('INFO', f'Command {command} completed')
         
     except asyncio.CancelledError:
@@ -52,7 +52,7 @@ async def execution_lifecycle(client: NATSMachineClient, run_id: str, command: s
     except Exception as e:
         # Failure path
         logger.error("Execution error: %s", e, exc_info=True)
-        await client.publish_status({'state': 'error', 'run_id': run_id})
+        await client.publish_status({'state': 'error', 'run_id': None})
         await client.publish_log('ERROR', f'Command failed: {str(e)}')
         raise  # Re-raise to let the caller return False
 
@@ -60,7 +60,7 @@ async def execution_lifecycle(client: NATSMachineClient, run_id: str, command: s
 async def main():
     # 1. Initialize Objects
     client = NATSMachineClient(
-        servers=["nats://localhost:4222", "nats://localhost:4223", "nats://localhost:4224"],
+        servers=["nats://192.168.50.201:4222", "nats://192.168.50.201:4223", "nats://192.168.50.201:4224"],
         machine_id=MACHINE_ID
     )
     
@@ -84,7 +84,7 @@ async def main():
         if not await exec_state.acquire_execution(run_id):
             logger.warning("Cannot execute %s (run_id: %s): another command is running or cancelled", 
                          command, run_id)
-            await client.publish_status({'state': 'error', 'run_id': run_id})
+            await client.publish_status({'state': 'error', 'run_id': None})
             await client.publish_log('ERROR', f'Cannot execute {command}: another command is running')
             return False
 
@@ -92,10 +92,10 @@ async def main():
             async with execution_lifecycle(client, run_id, command):
                 # A. Safe Dispatching
                 # Check if command exists on the object
-                time.sleep(5)
+                #time.sleep(5)
                 handler = getattr(first_machine, command, None)
                 # replace handler for now with a dummy handler
-                handler = lambda **kwargs: True
+                #handler = lambda **kwargs: True
 
                 # Security: Ensure it's a method and not private (starts with _)
                 if not callable(handler) or command.startswith('_'):
@@ -139,7 +139,7 @@ async def main():
         # Try to acquire execution lock
         if not await exec_state.acquire_execution(run_id):
             logger.warning("Cannot pause (run_id: %s): another command is running", run_id)
-            await client.publish_status({'state': 'error', 'run_id': run_id})
+            await client.publish_status({'state': 'error', 'run_id': None})
             return False
 
         try:
@@ -179,7 +179,7 @@ async def main():
                 else:
                     logger.warning("Cancel run_id %s doesn't match current run_id %s", 
                                  run_id, current_run_id)
-                    await client.publish_status({'state': 'error', 'run_id': run_id})
+                    await client.publish_status({'state': 'error', 'run_id': None})
                     await client.publish_log('ERROR', f'Cancel run_id mismatch (requested: {run_id}, current: {current_run_id})')
                 return False
 

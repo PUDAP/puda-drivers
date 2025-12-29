@@ -202,12 +202,13 @@ class First:
             slot: Slot name (e.g., 'A1', 'B2')
             well: Optional well name within the slot (e.g., 'A1' for a well in a tiprack)
         
-        Raises:
-            ValueError: If tip is already attached
+        Note:
+            This method is idempotent - if a tip is already attached, it will
+            log a warning and return successfully without raising an error.
         """
         if self.pipette.is_tip_attached():
-            self._logger.error("Cannot attach tip: tip already attached")
-            raise ValueError("Tip already attached")
+            self._logger.warning("Tip already attached - skipping attachment (idempotent operation)")
+            return
         
         self._logger.info("Attaching tip from slot '%s'%s", slot, f", well '{well}'" if well else "")
         pos = self.get_absolute_z_position(slot, well)

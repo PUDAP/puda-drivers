@@ -88,7 +88,7 @@ async def watch_status(js: JetStreamContext, machine_id: str, interval: float = 
 
 async def main():
     """Main function - continuously monitors status"""
-    servers = ["nats://localhost:4222", "nats://localhost:4223", "nats://localhost:4224"]
+    servers = ["nats://192.168.50.201:4222", "nats://192.168.50.201:4223", "nats://192.168.50.201:4224"]
     
     try:
         # Connect to NATS
