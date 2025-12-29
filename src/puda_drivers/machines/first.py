@@ -160,7 +160,16 @@ class First:
         self._logger.info("Machine shutdown complete")
         
     def load_labware(self, slot: str, labware_name: str):
-        """Load a labware object into a slot."""
+        """
+        Load a labware object into a slot.
+        
+        Args:
+            slot: Slot name (e.g., 'A1', 'B2')
+            labware_name: Name of the labware class to load
+        
+        Raises:
+            KeyError: If slot is not found in deck
+        """
         self._logger.info("Loading labware '%s' into slot '%s'", labware_name, slot)
         self.deck.load_labware(slot=slot, labware_name=labware_name)
         self._logger.debug("Labware '%s' loaded into slot '%s'", labware_name, slot)
@@ -186,7 +195,16 @@ class First:
         self._logger.info("Deck layout loaded successfully")
         
     def attach_tip(self, slot: str, well: Optional[str] = None):
-        """Attach a tip from a slot."""
+        """
+        Attach a tip from a slot.
+
+        Args:
+            slot: Slot name (e.g., 'A1', 'B2')
+            well: Optional well name within the slot (e.g., 'A1' for a well in a tiprack)
+        
+        Raises:
+            ValueError: If tip is already attached
+        """
         if self.pipette.is_tip_attached():
             self._logger.error("Cannot attach tip: tip already attached")
             raise ValueError("Tip already attached")
@@ -361,6 +379,13 @@ class First:
     def get_absolute_a_position(self, slot: str, well: Optional[str] = None) -> Position:
         """
         Get the absolute position for a slot (and optionally a well within that slot) based on the origin
+        
+        Args:
+            slot: Slot name (e.g., 'A1', 'B2')
+            well: Optional well name within the slot (e.g., 'A1' for a well in a tiprack)
+            
+        Returns:
+            Position with absolute coordinates
         """
         pos = self.get_slot_origin(slot)
         

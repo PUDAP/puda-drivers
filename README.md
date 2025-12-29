@@ -167,7 +167,7 @@ sartorius_ports = list_serial_ports(filter_desc="Sartorius")
 
 ## Requirements
 
-- Python >= 3.14
+- Python >= 3.8
 - pyserial >= 3.5
 - See `pyproject.toml` for full dependency list
 
