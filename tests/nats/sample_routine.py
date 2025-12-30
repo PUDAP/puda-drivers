@@ -7,6 +7,8 @@ import logging
 from datetime import datetime, timezone
 import nats
 from nats.js.client import JetStreamContext
+from nats.errors import BadSubscriptionError
+import uuid
 
 # Configure logging
 logging.basicConfig(
@@ -72,6 +74,8 @@ async def wait_for_response(nc: nats.NATS, machine_id: str, run_id: str, command
         nonlocal result
         try:
             response = json.loads(msg.data.decode())
+            
+            logger.info("Response: \n%s", json.dumps(response, indent=2))
             resp_run_id = response.get('run_id')
             resp_command_id = response.get('command_id')
             status = response.get('status')
@@ -98,15 +102,20 @@ async def wait_for_response(nc: nats.NATS, machine_id: str, run_id: str, command
         try:
             await asyncio.wait_for(response_received.wait(), timeout=timeout)
         except asyncio.TimeoutError:
-            await sub.unsubscribe()
             raise TimeoutError(f"Timeout waiting for response after {timeout}s")
         
-        # Unsubscribe and return result
-        await sub.unsubscribe()
+        # Return result
         return result
-    except Exception:
-        await sub.unsubscribe()
-        raise
+    finally:
+        # Always try to unsubscribe, but handle if subscription is already invalid
+        try:
+            await sub.unsubscribe()
+        except BadSubscriptionError:
+            # Subscription might already be invalid (e.g., due to timeout cancellation)
+            logger.debug("Subscription already invalid, skipping unsubscribe")
+        except Exception as e:
+            # Other unexpected errors during unsubscribe
+            logger.debug("Error during unsubscribe: %s", e)
 
 
 async def send_execute_command(
@@ -131,15 +140,7 @@ async def send_execute_command(
     Returns:
         True on ack (success), False on nak/term (error)
     """
-    subject = f"{NAMESPACE}.{machine_id}.cmd.execute"
-    
-    command = payload.get('header', {}).get('command', 'unknown')
-    parameters = payload.get('params', {})
-    
-    logger.info("Sending execute command to %s", subject)
-    logger.info("Run ID: %s, Command ID: %s", run_id, command_id)
-    logger.info("Command: %s", command)
-    logger.info("Parameters: %s", parameters)
+    subject = f"{NAMESPACE}.{machine_id}.cmd.queue"
     
     # Publish to JetStream (execute commands use JetStream)
     pub_ack = await js.publish(
@@ -147,8 +148,8 @@ async def send_execute_command(
         json.dumps(payload).encode()
     )
     
+    logger.info("Payload: \n%s", json.dumps(payload, indent=2))
     logger.info("Command sent successfully. Sequence: %s", pub_ack.seq)
-    logger.info("Stream: %s", pub_ack.stream)
     
     # Wait for response message
     try:
@@ -179,7 +180,7 @@ async def send_pause_command(
     Returns:
         True on ack (success), False on nak/term (error)
     """
-    subject = f"{NAMESPACE}.{machine_id}.cmd.pause"
+    subject = f"{NAMESPACE}.{machine_id}.cmd.immediate"
     command_id = payload.get('header', {}).get('command_id', 'pause')
     
     logger.info("Sending pause command to %s for run_id: %s", subject, run_id)
@@ -220,7 +221,7 @@ async def send_cancel_command(
     Returns:
         True on ack (success), False on nak/term (error)
     """
-    subject = f"{NAMESPACE}.{machine_id}.cmd.cancel"
+    subject = f"{NAMESPACE}.{machine_id}.cmd.immediate"
     command_id = payload.get('header', {}).get('command_id', 'cancel')
     
     logger.info("Sending cancel command to %s for run_id: %s", subject, run_id)
@@ -256,7 +257,11 @@ async def main():
         {
             "command": "load_deck",
             "params": {
-                "deck_layout": { "A3": "opentrons_96_tiprack_300ul" }
+                "deck_layout": { 
+                    "C1": "trash_bin",
+                    "C2": "polyelectric_8_wellplate_30000ul",
+                    "A3": "opentrons_96_tiprack_300ul"
+                }
             }
         },
         {
@@ -266,11 +271,19 @@ async def main():
         {
             "command": "aspirate_from",
             "params": { "slot": "C2", "well": "A1", "amount": 100 }
+        },
+        {
+            "command": "dispense_to",
+            "params": { "slot": "C2", "well": "B4", "amount": 100 }
+        },
+        {
+            "command": "drop_tip",
+            "params": { "slot": "C1", "well": "A1" }
         }
     ]
     
     # Generate run_id for this experiment (same for all commands in experiment)
-    run_id = "current_run_123"
+    run_id = str(uuid.uuid4())
     
     # Command counter (starts at 0, increments for each command)
     command_id = 0
@@ -317,7 +330,7 @@ async def main():
         logger.info("=" * 60)
         
     except Exception as e:
-        logger.error("Error: %s", e, exc_info=True)
+        logger.error(e, exc_info=True)
         return 1
     finally:
         if nc:

@@ -125,67 +125,76 @@ async def main():
         except asyncio.CancelledError:
             # Already handled by execution_lifecycle, just return False
             return False
+        except (ValueError, TypeError, AttributeError) as e:
+            # Non-recoverable errors: invalid state, wrong parameters, etc.
+            # Re-raise to terminate the message (no redelivery)
+            logger.error("Execute handler error (non-recoverable): %s", e, exc_info=True)
+            raise
         except Exception as e:
-            logger.error("Execute handler error: %s", e, exc_info=True)
+            # Recoverable errors: return False to trigger NAK and redelivery
+            logger.error("Execute handler error (recoverable): %s", e, exc_info=True)
             return False
         finally:
             exec_state.release_execution()
 
-    async def handle_pause(payload: Dict[str, Any]) -> bool:
+    async def handle_immediate(payload: Dict[str, Any]) -> bool:
+        """
+        Handle immediate commands (pause, cancel, unpause, etc.).
+        Note: pause, unpause, and cancel are handled by the client's built-in logic,
+        but this handler can add custom logic on the machine side if needed.
+        """
         header = payload.get('header', {})
-        run_id = header.get('run_id')
-        command = header.get('command', 'pause')
-
-        # Try to acquire execution lock
-        if not await exec_state.acquire_execution(run_id):
-            logger.warning("Cannot pause (run_id: %s): another command is running", run_id)
-            await client.publish_status({'state': 'error', 'run_id': None})
-            return False
-
-        try:
-            async with execution_lifecycle(client, run_id, command, final_state='paused'):
-                # Pause command logic (if any machine-specific pause action needed)
-                # For now, just the status update handled by context manager
-                pass
-            return True
-
-        except Exception:
-            return False
-        finally:
-            exec_state.release_execution()
-
-    async def handle_cancel(payload: Dict[str, Any]) -> bool:
-        header = payload.get('header', {})
+        command = header.get('command', '').lower()
         run_id = header.get('run_id')
 
-        try:
-            # Try to cancel the current execution
-            cancelled = await exec_state.cancel_current_execution(run_id)
-            
-            if cancelled:
-                logger.info("Successfully cancelled execution (run_id: %s)", run_id)
-                await client.publish_status({'state': 'idle', 'run_id': None})
-                await client.publish_log('INFO', f'Command cancelled (run_id: {run_id})')
-                return True
-            else:
-                # No execution to cancel, or run_id doesn't match
-                current_task = exec_state.get_current_task()
-                current_run_id = exec_state.get_current_run_id()
-                
-                if current_task is None:
-                    logger.warning("Cancel requested but no command is currently executing (run_id: %s)", run_id)
-                    await client.publish_status({'state': 'idle', 'run_id': None})
-                    await client.publish_log('WARNING', f'Cancel requested but no command running (run_id: {run_id})')
-                else:
-                    logger.warning("Cancel run_id %s doesn't match current run_id %s", 
-                                 run_id, current_run_id)
-                    await client.publish_status({'state': 'error', 'run_id': None})
-                    await client.publish_log('ERROR', f'Cancel run_id mismatch (requested: {run_id}, current: {current_run_id})')
+        # Built-in commands (pause, unpause, cancel) are handled by the client
+        # This handler is called for other immediate commands or for custom logic
+        if command == 'pause':
+            # Custom pause logic if needed (beyond built-in handling)
+            # Try to acquire execution lock for custom pause actions
+            if not await exec_state.acquire_execution(run_id):
+                logger.warning("Cannot pause (run_id: %s): another command is running", run_id)
                 return False
-
-        except Exception as e:
-            logger.error("Cancel handler error: %s", e, exc_info=True)
-            return False
+            
+            try:
+                async with execution_lifecycle(client, run_id, command, final_state='paused'):
+                    # Add machine-specific pause logic here if needed
+                    pass
+                return True
+            except Exception:
+                return False
+            finally:
+                exec_state.release_execution()
+        
+        elif command == 'cancel':
+            # Custom cancel logic if needed (beyond built-in handling)
+            try:
+                # Try to cancel the current execution
+                cancelled = await exec_state.cancel_current_execution(run_id)
+                
+                if cancelled:
+                    logger.info("Successfully cancelled execution (run_id: %s)", run_id)
+                    await client.publish_log('INFO', f'Command cancelled (run_id: {run_id})')
+                    return True
+                else:
+                    # No execution to cancel, or run_id doesn't match
+                    current_task = exec_state.get_current_task()
+                    current_run_id = exec_state.get_current_run_id()
+                    
+                    if current_task is None:
+                        logger.warning("Cancel requested but no command is currently executing (run_id: %s)", run_id)
+                        await client.publish_log('WARNING', f'Cancel requested but no command running (run_id: {run_id})')
+                    else:
+                        logger.warning("Cancel run_id %s doesn't match current run_id %s", 
+                                     run_id, current_run_id)
+                        await client.publish_log('ERROR', f'Cancel run_id mismatch (requested: {run_id}, current: {current_run_id})')
+                    return False
+            except Exception as e:
+                logger.error("Cancel handler error: %s", e, exc_info=True)
+                return False
+        
+        # For other immediate commands, return True (handled by built-in logic or user)
+        return True
 
     # 3. Connect and Start Up
     if not await client.connect():
@@ -193,10 +202,10 @@ async def main():
         return
 
     try:
-        # Subscribe
-        await client.subscribe_execute(handle_execute)
-        await client.subscribe_pause(handle_pause)
-        await client.subscribe_cancel(handle_cancel)
+        # Subscribe to queue commands (standard execute commands)
+        await client.subscribe_queue(handle_execute)
+        # Subscribe to immediate commands (pause, cancel, unpause, etc.)
+        await client.subscribe_immediate(handle_immediate)
 
         # Start Hardware
         first_machine.startup()
