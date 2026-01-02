@@ -508,9 +508,9 @@ class GCodeController(SerialController):
         
         return self._current_position
 
-    def query_position(self) -> Position:
+    def get_position(self) -> Position:
         """
-        Query the current machine position (M114 command).
+        Get the current machine position (M114 command).
 
         Returns:
             Position containing X, Y, Z, and A positions
@@ -560,7 +560,7 @@ class GCodeController(SerialController):
         self._logger.info("Starting position synchronization check (M114).")
 
         # Query the actual machine position
-        queried_position = self.query_position()
+        queried_position = self.get_position()
 
         if not queried_position.get_axes():
             self._logger.error("Query position failed. Cannot synchronize.")

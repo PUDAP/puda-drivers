@@ -7,6 +7,7 @@ pipettes and robotic dispensers via serial communication.
 Reference: https://api.sartorius.com/document-hub/dam/download/34901/Sartorius-rLine-technical-user-manual-v1.1.pdf
 """
 
+import json
 import logging
 from typing import Optional
 from puda_drivers.core.serialcontroller import SerialController
@@ -337,7 +338,10 @@ class SartoriusController(SerialController):
         Query the current status of the pipette (DS command).
 
         Returns:
-            Status code character (single character string)
+            JSON string containing status information with keys:
+            - status_code: Status code character
+            - status_message: Human-readable status message (if known)
+            - is_known: Boolean indicating if status code is recognized
 
         Raises:
             SartoriusDeviceError: If the status query fails
@@ -351,15 +355,22 @@ class SartoriusController(SerialController):
             )
 
         status_code = response[1]
+        status_data = {
+            "status_code": status_code,
+            "is_known": status_code in STATUS_CODES
+        }
+        
         if status_code in STATUS_CODES:
             status_message = STATUS_CODES[status_code]
+            status_data["status_message"] = status_message
             self._logger.info("Pipette Status Code [%s]: %s\n", status_code, status_message)
         else:
+            status_data["status_message"] = None
             self._logger.warning(
                 "Pipette Status Code [%s]: Unknown Status Code\n", status_code
             )
 
-        return status_code
+        return json.dumps(status_data)
     
     def get_position(self) -> int:
         """

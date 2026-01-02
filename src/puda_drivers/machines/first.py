@@ -159,6 +159,23 @@ class First:
         self.camera.disconnect()
         self._logger.info("Machine shutdown complete")
         
+    def get_position(self) -> Dict[str, float]:
+        """
+        Get the current position of the machine. Both QuBot and Sartorius are queried.
+        
+        Args:
+            None
+        Returns:
+            Dictionary containing the current position of the machine and it's components.
+        """
+        qubot_position = self.qubot.get_position()
+        sartorius_position = self.pipette.get_position()
+
+        return {
+            "qubot": qubot_position.to_dict(),
+            "pipette": sartorius_position,
+        }
+        
     def load_labware(self, slot: str, labware_name: str):
         """
         Load a labware object into a slot.
