@@ -514,6 +514,9 @@ class GCodeController(SerialController):
 
         This method can be called even when the machine is moving from other commands,
         as it runs the blocking serial communication in a separate thread.
+        
+        If the M114 command takes more than 1 second to respond, falls back to
+        returning the internally tracked position instead.
 
         Returns:
             Position containing X, Y, Z, and A positions
@@ -523,30 +526,38 @@ class GCodeController(SerialController):
         """
         self._logger.info("Querying current machine position (M114).")
         # Run the blocking execute call in a thread pool to allow concurrent operations
-        res: str = await asyncio.to_thread(self.execute, "M114")
-        
-        print(f"res: {res}")
+        # with a 1 second timeout - if it takes longer, fall back to internal position
+        try:
+            res: str = await asyncio.wait_for(
+                asyncio.to_thread(self.execute, "M114"),
+                timeout=1.0
+            )
+            
+            # Extract position values using regex
+            pattern = re.compile(r"([XYZA]):(-?\d+\.\d+)")
+            matches = pattern.findall(res)
 
-        # Extract position values using regex
-        pattern = re.compile(r"([XYZA]):(-?\d+\.\d+)")
-        matches = pattern.findall(res)
+            position_data: Dict[str, float] = {}
 
-        position_data: Dict[str, float] = {}
+            for axis, value_str in matches:
+                try:
+                    position_data[axis.lower()] = float(value_str)
+                except ValueError:
+                    self._logger.error(
+                        "Failed to convert position value '%s' for axis %s to float.",
+                        value_str,
+                        axis,
+                    )
+                    continue
 
-        for axis, value_str in matches:
-            try:
-                position_data[axis.lower()] = float(value_str)
-            except ValueError:
-                self._logger.error(
-                    "Failed to convert position value '%s' for axis %s to float.",
-                    value_str,
-                    axis,
-                )
-                continue
-
-        position = Position.from_dict(position_data)
-        self._logger.info("Query position complete. Retrieved positions: %s", position)
-        return position
+            position = Position.from_dict(position_data)
+            self._logger.info("Query position complete. Retrieved positions: %s", position)
+            return position
+        except asyncio.TimeoutError:
+            self._logger.warning(
+                "M114 command timed out after 1 second. Falling back to internal position."
+            )
+            return self.get_internal_position()
 
     def _sync_position(self) -> Tuple[bool, Position]:
         """

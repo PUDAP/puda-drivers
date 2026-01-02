@@ -107,8 +107,9 @@ class SerialController(ABC):
 
     def _send_command(self, command: str) -> None:
         """
-        Sends a custom protocol command, reads, and returns the response.
-        If a timeout occurs, it logs the error and returns None instead of raising an exception.
+        Sends a custom protocol command.
+        Note: This method should be called while holding self._lock to ensure
+        atomic command/response pairing.
         """
         if not self.is_connected or not self._serial:
             self._logger.error(
@@ -120,26 +121,24 @@ class SerialController(ABC):
 
         self._logger.info("-> Sending: %r", command)
 
-        # Send the command
-        with self._lock:
-            try:
-                self._serial.reset_input_buffer()  # clear input buffer
-                self._serial.reset_output_buffer()  # clear output buffer
-                self._serial.flush()
-                self._serial.write(bytes(command, "utf-8"))
+        try:
+            self._serial.reset_input_buffer()  # clear input buffer
+            self._serial.reset_output_buffer()  # clear output buffer
+            self._serial.flush()
+            self._serial.write(bytes(command, "utf-8"))
 
-            except serial.SerialTimeoutException as e:
-                # Log the timeout error and return None as requested (no re-raise)
-                self._logger.error("Timeout on command '%s'. Error: %s", command, e)
-                return None
+        except serial.SerialTimeoutException as e:
+            # Log the timeout error and return None as requested (no re-raise)
+            self._logger.error("Timeout on command '%s'. Error: %s", command, e)
+            return None
 
-            except serial.SerialException as e:
-                self._logger.error(
-                    "Serial error writing or reading command '%s'. Error: %s",
-                    command,
-                    e,
-                )
-                return None
+        except serial.SerialException as e:
+            self._logger.error(
+                "Serial error writing command '%s'. Error: %s",
+                command,
+                e,
+            )
+            return None
 
     def _read_response(self) -> str:
         """
@@ -203,11 +202,14 @@ class SerialController(ABC):
         
         This method combines sending a command and reading its response into a
         single atomic operation, ensuring the response corresponds to the command
-        that was just sent. This is the preferred method for commands that
-        require a response.
+        that was just sent. The entire operation is protected by a lock to prevent
+        concurrent commands from interfering with each other.
+        
+        This is the preferred method for commands that require a response.
         
         Args:
             command: Command string to send (should include protocol terminator if needed)
+            value: Optional value parameter for the command
             
         Returns:
             Response string from the device
@@ -216,20 +218,22 @@ class SerialController(ABC):
             serial.SerialException: If device is not connected or communication fails
             serial.SerialTimeoutException: If no response is received within timeout
         """
-        self._send_command(self._build_command(command, value))
-        
-        # Increase timeout by 60 seconds for G28 (homing) command
-        original_timeout = self.timeout
-        if "G28" in command.upper():
-            self.timeout = original_timeout + 60
-            # Also update the serial connection's timeout if connected
-            if self.is_connected and self._serial:
-                self._serial.timeout = self.timeout
-        
-        try:
-            return self._read_response()
-        finally:
-            # Restore original timeout
-            self.timeout = original_timeout
-            if self.is_connected and self._serial:
-                self._serial.timeout = original_timeout
+        # Hold the lock for the entire send+read operation to ensure atomicity
+        # This prevents concurrent commands from mixing up responses
+        with self._lock:
+            # Increase timeout by 60 seconds for G28 (homing) command
+            original_timeout = self.timeout
+            if "G28" in command.upper():
+                self.timeout = original_timeout + 60
+                # Also update the serial connection's timeout if connected
+                if self.is_connected and self._serial:
+                    self._serial.timeout = self.timeout
+            
+            try:
+                self._send_command(self._build_command(command, value))
+                return self._read_response()
+            finally:
+                # Restore original timeout
+                self.timeout = original_timeout
+                if self.is_connected and self._serial:
+                    self._serial.timeout = original_timeout
