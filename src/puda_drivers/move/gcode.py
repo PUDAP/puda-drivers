@@ -524,6 +524,8 @@ class GCodeController(SerialController):
         self._logger.info("Querying current machine position (M114).")
         # Run the blocking execute call in a thread pool to allow concurrent operations
         res: str = await asyncio.to_thread(self.execute, "M114")
+        
+        print(f"res: {res}")
 
         # Extract position values using regex
         pattern = re.compile(r"([XYZA]):(-?\d+\.\d+)")
