@@ -1,6 +1,6 @@
 [project]
 name = "puda-drivers"
-version = "0.0.15"
+version = "0.0.16"
 description = "Hardware drivers for the PUDA platform."
 readme = "README.md"
 authors = [
