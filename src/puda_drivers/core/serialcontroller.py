@@ -4,6 +4,7 @@ Generic Serial Controller for communicating with devices over serial ports.
 
 import time
 import logging
+import threading
 from typing import Optional, List, Tuple
 from abc import ABC, abstractmethod
 import serial
@@ -49,6 +50,9 @@ class SerialController(ABC):
         self.baudrate = baudrate
         self.timeout = timeout
         self._logger = logger
+        
+        # lock to prevent concurrent access to the serial port
+        self._lock = threading.Lock()
 
     def connect(self) -> None:
         """
@@ -117,24 +121,25 @@ class SerialController(ABC):
         self._logger.info("-> Sending: %r", command)
 
         # Send the command
-        try:
-            self._serial.reset_input_buffer()  # clear input buffer
-            self._serial.reset_output_buffer()  # clear output buffer
-            self._serial.flush()
-            self._serial.write(bytes(command, "utf-8"))
+        with self._lock:
+            try:
+                self._serial.reset_input_buffer()  # clear input buffer
+                self._serial.reset_output_buffer()  # clear output buffer
+                self._serial.flush()
+                self._serial.write(bytes(command, "utf-8"))
 
-        except serial.SerialTimeoutException as e:
-            # Log the timeout error and return None as requested (no re-raise)
-            self._logger.error("Timeout on command '%s'. Error: %s", command, e)
-            return None
+            except serial.SerialTimeoutException as e:
+                # Log the timeout error and return None as requested (no re-raise)
+                self._logger.error("Timeout on command '%s'. Error: %s", command, e)
+                return None
 
-        except serial.SerialException as e:
-            self._logger.error(
-                "Serial error writing or reading command '%s'. Error: %s",
-                command,
-                e,
-            )
-            return None
+            except serial.SerialException as e:
+                self._logger.error(
+                    "Serial error writing or reading command '%s'. Error: %s",
+                    command,
+                    e,
+                )
+                return None
 
     def _read_response(self) -> str:
         """
