@@ -10,6 +10,8 @@ Supports homing and position synchronization.
 import re
 import logging
 import asyncio
+import time
+import serial
 from dataclasses import dataclass
 from typing import Optional, Dict, Tuple, Union
 
@@ -508,6 +510,69 @@ class GCodeController(SerialController):
         
         return self._current_position
 
+    def _read_m114_response(self) -> str:
+        """
+        Read the full M114 response, including all lines before 'ok'.
+        
+        M114 typically returns position data on one or more lines followed by 'ok'.
+        This method ensures we capture all lines before stopping.
+        
+        Returns:
+            Complete response string including all lines
+        """
+        if not self.is_connected or not self._serial:
+            raise serial.SerialException("Device not connected.")
+
+        start_time = time.time()
+        response_lines = []
+
+        while time.time() - start_time < self.timeout:
+            if self._serial.in_waiting > 0:
+                # Read line by line to capture all data
+                line = self._serial.readline()
+                if line:
+                    decoded_line = line.decode("utf-8", errors="ignore").strip()
+                    response_lines.append(decoded_line)
+                    
+                    # Check if this line contains 'ok' or 'err'
+                    if "ok" in decoded_line.lower() or "err" in decoded_line.lower():
+                        # Still read a bit more in case there's trailing data
+                        time.sleep(0.1)
+                        # Read any remaining data
+                        if self._serial.in_waiting > 0:
+                            remaining = self._serial.read(self._serial.in_waiting)
+                            if remaining:
+                                remaining_decoded = remaining.decode("utf-8", errors="ignore").strip()
+                                if remaining_decoded:
+                                    response_lines.append(remaining_decoded)
+                        break
+            else:
+                # If we've read some lines but no 'ok' yet, wait a bit more
+                if response_lines:
+                    time.sleep(0.1)
+                else:
+                    time.sleep(0.1)
+
+        if not response_lines:
+            self._logger.error("No response within %s seconds.", self.timeout)
+            raise serial.SerialTimeoutException(
+                f"No response received within {self.timeout} seconds."
+            )
+
+        # Combine all lines
+        full_response = "\n".join(response_lines)
+        
+        if "ok" in full_response.lower():
+            self._logger.debug("<- Received M114 response: %r", full_response)
+        elif "err" in full_response.lower():
+            self._logger.error("<- Received M114 error: %r", full_response)
+        else:
+            self._logger.warning(
+                "<- Received unexpected M114 response (no 'ok' or 'err'): %r", full_response
+            )
+        
+        return full_response
+
     async def get_position(self) -> Position:
         """
         Get the current machine position (M114 command) asynchronously.
@@ -522,27 +587,40 @@ class GCodeController(SerialController):
             Returns an empty Position if the query fails or no positions are found.
         """
         self._logger.info("Querying current machine position (M114).")
-        # Run the blocking execute call in a thread pool to allow concurrent operations
-        res: str = await asyncio.to_thread(self.execute, "M114")
         
-        print(f"res: {res}")
+        # Send M114 command
+        command = self._build_command("M114")
+        await asyncio.to_thread(self._send_command, command)
+        
+        # Read the full response using custom method
+        res: str = await asyncio.to_thread(self._read_m114_response)
+        
+        self._logger.debug("M114 raw response: %r", res)
 
         # Extract position values using regex
-        pattern = re.compile(r"([XYZA]):(-?\d+\.\d+)")
-        matches = pattern.findall(res)
-
+        # Try multiple patterns to handle different response formats
+        patterns = [
+            re.compile(r"([XYZA]):(-?\d+\.\d+)"),  # Standard format: X:123.45
+            re.compile(r"([XYZA])\s*:?\s*(-?\d+\.\d+)"),  # With optional spaces
+            re.compile(r"([XYZA])\s*=\s*(-?\d+\.\d+)"),  # Alternative: X=123.45
+        ]
+        
         position_data: Dict[str, float] = {}
-
-        for axis, value_str in matches:
-            try:
-                position_data[axis.lower()] = float(value_str)
-            except ValueError:
-                self._logger.error(
-                    "Failed to convert position value '%s' for axis %s to float.",
-                    value_str,
-                    axis,
-                )
-                continue
+        
+        for pattern in patterns:
+            matches = pattern.findall(res)
+            if matches:
+                for axis, value_str in matches:
+                    try:
+                        position_data[axis.lower()] = float(value_str)
+                    except ValueError:
+                        self._logger.error(
+                            "Failed to convert position value '%s' for axis %s to float.",
+                            value_str,
+                            axis,
+                        )
+                        continue
+                break  # Stop after first successful pattern match
 
         position = Position.from_dict(position_data)
         self._logger.info("Query position complete. Retrieved positions: %s", position)
