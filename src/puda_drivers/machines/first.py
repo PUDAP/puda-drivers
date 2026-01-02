@@ -159,7 +159,7 @@ class First:
         self.camera.disconnect()
         self._logger.info("Machine shutdown complete")
         
-    def get_position(self) -> Dict[str, float]:
+    async def get_position(self) -> Dict[str, Union[Dict[str, float], int]]:
         """
         Get the current position of the machine. Both QuBot and Sartorius are queried.
         
@@ -168,8 +168,8 @@ class First:
         Returns:
             Dictionary containing the current position of the machine and it's components.
         """
-        qubot_position = self.qubot.get_position()
-        sartorius_position = self.pipette.get_position()
+        qubot_position = await self.qubot.get_position()
+        sartorius_position = await self.pipette.get_position()
 
         return {
             "qubot": qubot_position.to_dict(),
@@ -234,7 +234,11 @@ class First:
         self.qubot.move_absolute(position=pos)
         
         # attach tip (move slowly down)
-        insert_depth = self.deck[slot].get_insert_depth()
+        labware = self.deck[slot]
+        if labware is None:
+            self._logger.error("Cannot attach tip: no labware loaded in slot '%s'", slot)
+            raise ValueError(f"No labware loaded in slot '{slot}'. Load labware before attaching tips.")
+        insert_depth = labware.get_insert_depth()
         self._logger.debug("Moving down by %s mm to insert tip", insert_depth)
         self.qubot.move_relative(
             position=Position(z=-insert_depth),
@@ -378,17 +382,24 @@ class First:
             
         Returns:
             Position with absolute coordinates
+            
+        Raises:
+            ValueError: If well is specified but no labware is loaded in the slot
         """
         # Get slot origin
         pos = self.get_slot_origin(slot)
 
         # relative well position from slot origin
         if well:
-            well_pos = self.deck[slot].get_well_position(well).get_xy()
+            labware = self.deck[slot]
+            if labware is None:
+                self._logger.error("Cannot get well position: no labware loaded in slot '%s'", slot)
+                raise ValueError(f"No labware loaded in slot '{slot}'. Load labware before accessing wells.")
+            well_pos = labware.get_well_position(well).get_xy()
             # the deck is rotated 90 degrees clockwise for this machine
             pos += well_pos.swap_xy()
             # get z
-            pos += Position(z=self.deck[slot].get_height() - self.CEILING_HEIGHT)
+            pos += Position(z=labware.get_height() - self.CEILING_HEIGHT)
             self._logger.debug("Absolute Z position for slot '%s', well '%s': %s", slot, well, pos)
         else:
             self._logger.debug("Absolute Z position for slot '%s': %s", slot, pos)
@@ -404,15 +415,22 @@ class First:
             
         Returns:
             Position with absolute coordinates
+            
+        Raises:
+            ValueError: If well is specified but no labware is loaded in the slot
         """
         pos = self.get_slot_origin(slot)
         
         if well:
-            well_pos = self.deck[slot].get_well_position(well).get_xy()
+            labware = self.deck[slot]
+            if labware is None:
+                self._logger.error("Cannot get well position: no labware loaded in slot '%s'", slot)
+                raise ValueError(f"No labware loaded in slot '{slot}'. Load labware before accessing wells.")
+            well_pos = labware.get_well_position(well).get_xy()
             pos += well_pos.swap_xy()
             
             # get a
-            a = Position(a=self.deck[slot].get_height() - self.CEILING_HEIGHT)
+            a = Position(a=labware.get_height() - self.CEILING_HEIGHT)
             pos += a
             self._logger.debug("Absolute A position for slot '%s', well '%s': %s", slot, well, pos)
         else:

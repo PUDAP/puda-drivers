@@ -1,4 +1,5 @@
 import logging
+import asyncio
 from puda_drivers.transfer.liquid.sartorius import SartoriusController
 from puda_drivers.core.logging import setup_logging
 
@@ -52,7 +53,7 @@ def test_pipette_operations():
         pipette.set_outward_speed(3)
         pipette.get_outward_speed()
         pipette.run_to_position(100)
-        pipette.get_position()
+        asyncio.run(pipette.get_position())
 
         # 3. Eject Tip (if any)
         print("[STEP 3] Ejecting Tip (if any)...")

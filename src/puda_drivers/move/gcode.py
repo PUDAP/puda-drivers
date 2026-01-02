@@ -7,9 +7,9 @@ absolute coordinates, with relative moves converted to absolute internally.
 Supports homing and position synchronization.
 """
 
-import time
 import re
 import logging
+import asyncio
 from dataclasses import dataclass
 from typing import Optional, Dict, Tuple, Union
 
@@ -508,9 +508,12 @@ class GCodeController(SerialController):
         
         return self._current_position
 
-    def get_position(self) -> Position:
+    async def get_position(self) -> Position:
         """
-        Get the current machine position (M114 command).
+        Get the current machine position (M114 command) asynchronously.
+
+        This method can be called even when the machine is moving from other commands,
+        as it runs the blocking serial communication in a separate thread.
 
         Returns:
             Position containing X, Y, Z, and A positions
@@ -519,7 +522,8 @@ class GCodeController(SerialController):
             Returns an empty Position if the query fails or no positions are found.
         """
         self._logger.info("Querying current machine position (M114).")
-        res: str = self.execute("M114")
+        # Run the blocking execute call in a thread pool to allow concurrent operations
+        res: str = await asyncio.to_thread(self.execute, "M114")
 
         # Extract position values using regex
         pattern = re.compile(r"([XYZA]):(-?\d+\.\d+)")
@@ -556,11 +560,13 @@ class GCodeController(SerialController):
 
         Note:
             This method may recursively call itself if a correction move is made.
+            Since this method calls move_absolute (which is blocking), it remains
+            synchronous. The async get_position() is called using asyncio.run().
         """
         self._logger.info("Starting position synchronization check (M114).")
 
-        # Query the actual machine position
-        queried_position = self.get_position()
+        # Query the actual machine position (async method called from sync context)
+        queried_position = asyncio.run(self.get_position())
 
         if not queried_position.get_axes():
             self._logger.error("Query position failed. Cannot synchronize.")

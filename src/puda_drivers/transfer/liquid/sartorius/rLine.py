@@ -9,14 +9,13 @@ Reference: https://api.sartorius.com/document-hub/dam/download/34901/Sartorius-r
 
 import json
 import logging
+import asyncio
 from typing import Optional
 from puda_drivers.core.serialcontroller import SerialController
 from .constants import STATUS_CODES
 
 class SartoriusDeviceError(Exception):
     """Custom exception raised when the Sartorius device reports an error."""
-    
-    pass
 
 class SartoriusController(SerialController):
     """
@@ -372,15 +371,19 @@ class SartoriusController(SerialController):
 
         return json.dumps(status_data)
     
-    def get_position(self) -> int:
+    async def get_position(self) -> int:
         """
-        Query the current position of the pipette (DP command).
+        Query the current position of the pipette (DP command) asynchronously.
+
+        This method can be called even when the pipette is performing other operations,
+        as it runs the blocking serial communication in a separate thread.
 
         Returns:
             Current position in steps
         """
         self._logger.info("** Querying Position (DP) **")
-        response = self.execute(command="DP")
+        # Run the blocking execute call in a thread pool to allow concurrent operations
+        response = await asyncio.to_thread(self.execute, command="DP")
         self._logger.info("** Position: %s steps **\n", response)
         return response
     
